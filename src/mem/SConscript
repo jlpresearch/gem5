@@ -58,6 +58,7 @@ SimObject('XBar.py')
 SimObject('HMCController.py')
 SimObject('SerialLink.py')
 SimObject('MemDelay.py')
+SimObject('MemScheduler.py')
 
 Source('abstract_mem.cc')
 Source('addr_mapper.cc')
@@ -84,6 +85,7 @@ Source('hmc_controller.cc')
 Source('htm.cc')
 Source('serial_link.cc')
 Source('mem_delay.cc')
+Source('mem_scheduler.cc')
 
 if env['TARGET_ISA'] != 'null':
     Source('translating_port_proxy.cc')
@@ -131,7 +133,9 @@ DebugFlag("DRAMsim3")
 DebugFlag('HMCController')
 DebugFlag('SerialLink')
 DebugFlag('TokenPort')
+DebugFlag('MemScheduler')
 
 DebugFlag("MemChecker")
 DebugFlag("MemCheckerMonitor")
 DebugFlag("QOS")
+
