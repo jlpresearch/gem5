@@ -54,27 +54,75 @@ class MemScheduler : public ClockedObject
      * Mostly just forwards requests to the owner.
      * Part of a vector of ports. One for each CPU port (e.g., data, inst)
      */
+
+    struct RequestQueue{
+      std::queue<PacketPtr> readQueue;
+      std::queue<PacketPtr> writeQueue;
+      uint64_t timesChecked;
+      const uint32_t readQueueSize;
+      const uint32_t writeQueueSize;
+      const PortID cpuPortId;
+      bool sendRetry;
+      bool blocked(bool isRead){
+        return isRead ? readQueue.size() == readQueueSize : writeQueue.size() == writeQueueSize;
+      }
+      void push(PacketPtr pkt){
+        if (pkt->isRead())
+          readQueue.push(pkt);
+        else if(pkt->isWrite())
+          writeQueue.push(pkt);
+      }
+      bool emptyRead(){
+        return readQueue.empty();
+      }
+      bool emptyWrite(){
+        return writeQueue.empty();
+      }
+      RequestQueue(uint32_t rQueueSize, uint32_t wQueueSize, PortID portId):
+      timesChecked(0),
+      readQueueSize(rQueueSize),
+      writeQueueSize(wQueueSize),
+      cpuPortId(portId),
+      sendRetry(false){}
+    };
+
+    struct ResponseQueue{
+      std::queue<PacketPtr> respQueue;
+      const uint32_t respQueueSize;
+      PortID cpuPortId;
+      PortID memPortId;
+      bool sendRetry;
+      bool blocked(){
+        return respQueue.size() == respQueueSize;
+      }
+      bool empty(){
+        return respQueue.empty();
+      }
+      ResponseQueue(uint32_t queueSize, PortID portId):
+      respQueueSize(queueSize),
+      cpuPortId(portId),
+      sendRetry(false){}
+    };
+
     class CPUSidePort : public ResponsePort
     {
       private:
         /// The object that owns this object (MemScheduler)
         MemScheduler *owner;
 
-        /// True if the port needs to send a retry req.
-        bool needRetry;
-
+        /// Keep track of whether the port has been occupied by a previous packet
+        bool _blocked;
         /// If we tried to send a packet and it was blocked, store it here
-
-        bool blocked;
-        PacketPtr blockedPacket;
+        PacketPtr _blockedPacket;
+        const PortID _portId;
 
       public:
         /**
          * Constructor. Just calls the superclass constructor.
          */
-        CPUSidePort(const std::string& name, MemScheduler *owner) :
-            ResponsePort(name, owner), owner(owner), needRetry(false),
-            blocked(false), blockedPacket(nullptr)
+        CPUSidePort(const std::string& name, PortID portId, MemScheduler *owner) :
+            ResponsePort(name, owner), owner(owner), _blocked(false),
+            _blockedPacket(nullptr), _portId(portId)
         {}
 
         /**
@@ -100,11 +148,17 @@ class MemScheduler : public ClockedObject
          */
         void trySendRetry();
 
-        bool getBlocked();
+        bool blocked(){
+          return _blocked;
+        }
 
-        bool getNeedRetry();
+        PacketPtr blockedPkt(){
+          return _blockedPacket;
+        }
 
-        PacketPtr getBlockedPkt();
+        PortID portId(){
+          return _portId;
+        }
 
       protected:
         /**
@@ -149,16 +203,16 @@ class MemScheduler : public ClockedObject
       private:
         /// The object that owns this object (MemScheduler)
         MemScheduler *owner;
-        bool blocked;
+        bool _blocked;
         /// If we tried to send a packet and it was blocked, store it here
         PacketPtr blockedPacket;
-
+        const PortID _portId;
       public:
         /**
          * Constructor. Just calls the superclass constructor.
          */
-        MemSidePort(const std::string& name, MemScheduler *owner) :
-            RequestPort(name, owner), owner(owner), blocked(false), blockedPacket(nullptr)
+        MemSidePort(const std::string& name, PortID portId, MemScheduler *owner) :
+            RequestPort(name, owner), owner(owner), _blocked(false), blockedPacket(nullptr), _portId(portId)
         {}
 
         /**
@@ -167,9 +221,17 @@ class MemScheduler : public ClockedObject
          *
          * @param packet to send.
          */
+        void trySendRetry();
+
         void sendPacket(PacketPtr pkt);
 
-        bool getBlocked(void);
+        bool blocked(){
+          return _blocked;
+        }
+
+        PortID portId(){
+          return _portId;
+        }
 
       protected:
         /**
@@ -201,7 +263,7 @@ class MemScheduler : public ClockedObject
      * @return true if we can handle the request this cycle, false if the
      *         requestor needs to retry later
      */
-    bool handleRequest(CPUSidePort *port, PacketPtr pkt);
+    bool handleRequest(PortID portId, PacketPtr pkt);
 
     /**
      * Handle the respone from the memory side
@@ -210,7 +272,7 @@ class MemScheduler : public ClockedObject
      * @return true if we can handle the response this cycle, false if the
      *         responder needs to retry later
      */
-    bool handleResponse(PacketPtr pkt);
+    bool handleResponse(PortID memPortId, PacketPtr pkt);
 
     /**
      * Handle a packet functionally. Update the data on a write and get the
@@ -232,6 +294,8 @@ class MemScheduler : public ClockedObject
      * Tell the CPU side to ask for our memory ranges.
      */
     void sendRangeChange();
+
+    void recvRangeChange(PortID portId);
 
     void wakeUp();
 
@@ -257,25 +321,7 @@ class MemScheduler : public ClockedObject
     const uint32_t nCpuPorts;
     // const uint32_t numberQueues;
 
-    struct RequestQueue{
-      std::queue<PacketPtr> readQueue;
-      std::queue<PacketPtr> writeQueue;
-      const uint32_t readQueueSize;
-      const uint32_t writeQueueSize;
-      PortID portId;
-      bool blocked(bool isRead){
-        return isRead ? readQueue.size() == readQueueSize : writeQueue.size() == writeQueueSize;
-      }
-    };
 
-    struct ResponseQueue{
-      std::queue<PacketPtr> respQueue;
-      const uint32_t respQueueSize;
-      PortID portId;
-      bool blocked(bool isRead){
-        return respQueue.size() == respQueueSize;
-      }
-    };
 
     std::unordered_map<RequestorID, std::queue<PacketPtr> >::iterator currentReadEntry;
     std::unordered_map<RequestorID, std::queue<PacketPtr> >::iterator currentWriteEntry;
@@ -290,8 +336,8 @@ class MemScheduler : public ClockedObject
     std::unordered_map<RequestorID, bool> respBlocked;
     std::vector<RequestQueue> requestQueues;
     std::vector<ResponseQueue> responseQueues;
-    std::unordered_map<RequestPtr, PortID> routingTable2;
-    // AddrRangeMap<PortID, 0> memPortMap;
+    std::unordered_map<RequestPtr, PortID> respRoutingTable;
+    AddrRangeMap<PortID, 0> memPortMap;
   public:
 
     /** constructor
