@@ -71,7 +71,7 @@ MemScheduler::getPort(const std::string &if_name, PortID idx)
         return SimObject::getPort(if_name, idx);
     }
 }
-// TODO: Needs to be fixed
+
 void
 MemScheduler::CPUSidePort::sendPacket(PacketPtr pkt)
 {
@@ -138,7 +138,7 @@ MemScheduler::CPUSidePort::recvRespRetry()
 void
 MemScheduler::MemSidePort::trySendRetry()
 {
-    DPRINTF(MemScheduler, "Sending retry resp for %d\n", portId());
+    DPRINTF(MemScheduler, "Sending retry resp for memPort[%d]\n", portId());
     sendRetryResp();
 }
 
@@ -210,7 +210,7 @@ MemScheduler::processNextReqEvent(){
 
     uint64_t minCheck = -1;
     DPRINTF(MemScheduler, "processNextReqEvent: Finding the least recently visited non-empty queue\n");
-    for (auto it : requestQueues){
+    for (auto &it : requestQueues){
         if ((it.timesChecked < minCheck) && (!it.emptyRead())){
             minCheck = it.timesChecked;
         }
@@ -244,7 +244,7 @@ MemScheduler::processNextReqEvent(){
     }
 
     if (!nextReqEvent.scheduled()){
-        for (auto queue : requestQueues){
+        for (auto &queue : requestQueues){
             if (!queue.emptyRead()){
                 DPRINTF(MemScheduler, "processNextReqEvent: Scheduling nextReqEvent in processNextReqEvent\n");
                 schedule(nextReqEvent, curTick() + 500);
@@ -296,6 +296,7 @@ MemScheduler::processNextRespEvent(){
             auto memPort = find_if(memPorts.begin(), memPorts.end(), [memPortId](MemSidePort &obj){return obj.portId() == memPortId;});
             DPRINTF(MemScheduler, "processNextRespEvent: Sending retry to ports previously blocked, <respQueue[%d], memPort[%d]>\n", queue.cpuPortId, memPort->portId());
             memPort->trySendRetry();
+            queue.sendRetry = false;
         }
     }
     return;
@@ -397,6 +398,12 @@ void MemScheduler::recvRangeChange(PortID portId)
 void
 MemScheduler::wakeUp()
 {
-    if (!nextReqEvent.scheduled())
-        schedule(nextReqEvent, curTick());
+    if (!nextReqEvent.scheduled()){
+        for (auto &queue : requestQueues){
+            if (!queue.emptyRead()){
+                schedule(nextReqEvent, curTick() + 100);
+                return;
+            }
+        }
+    }
 }
