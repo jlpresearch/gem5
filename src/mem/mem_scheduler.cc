@@ -47,14 +47,12 @@ MemScheduler::MemScheduler(const MemSchedulerParams &params):
                                     "should be non-zero");
     for (uint32_t i = 0; i < nCpuPorts; ++i){
         cpuPorts.emplace_back(name() + ".cpu_side" + std::to_string(i), i, this);
-        requestQueues.push_back(RequestQueue(readBufferSize, writeBufferSize, i));
+        requestQueues.push_back(RequestQueue(readBufferSize, writeBufferSize, params.unified_queue, i));
         responseQueues.push_back(ResponseQueue(respBufferSize, i));
     }
     for (uint32_t i = 0; i < nMemPorts; ++i){
         memPorts.emplace_back(name() + ".mem_side" + std::to_string(i), i, this);
     }
-    currentReadEntry = readQueues.begin();
-    currentWriteEntry = writeQueues.begin();
 }
 
 Port &
@@ -75,8 +73,6 @@ MemScheduler::getPort(const std::string &if_name, PortID idx)
 void
 MemScheduler::CPUSidePort::sendPacket(PacketPtr pkt)
 {
-    // Note: This flow control is very simple since the memobj is blocking.
-
     panic_if(_blockedPacket != nullptr, "Should never try to send if blocked!");
 
     // If we can't send the packet across the port, store it for later.
@@ -104,14 +100,12 @@ MemScheduler::CPUSidePort::trySendRetry()
 void
 MemScheduler::CPUSidePort::recvFunctional(PacketPtr pkt)
 {
-    // Just forward to the memobj.
     return owner->handleFunctional(pkt);
 }
 
 bool
 MemScheduler::CPUSidePort::recvTimingReq(PacketPtr pkt)
 {
-    // Just forward to the memobj.
     if (!owner->handleRequest(portId(), pkt)) {
         DPRINTF(MemScheduler, "recvTimingReq: handleRequest returned false.\n");
         return false;
@@ -131,7 +125,6 @@ MemScheduler::CPUSidePort::recvRespRetry()
     _blockedPacket = nullptr;
     DPRINTF(MemScheduler, "recvRespRetry: Changed blockedPacket value, blockedPacket == nullptr: %d\n", _blockedPacket == nullptr);
     _blocked = false;
-    // Try to resend it. It's possible that it fails again.
     sendPacket(pkt);
 }
 
@@ -145,7 +138,6 @@ MemScheduler::MemSidePort::trySendRetry()
 void
 MemScheduler::MemSidePort::sendPacket(PacketPtr pkt)
 {
-    // Note: This flow control is very simple since the memobj is blocking.
     panic_if(_blocked == true, "Should never try to send if blocked MemSide!");
     // If we can't send the packet across the port, store it for later.
     if (!sendTimingReq(pkt)) {
@@ -158,7 +150,6 @@ MemScheduler::MemSidePort::sendPacket(PacketPtr pkt)
 bool
 MemScheduler::MemSidePort::recvTimingResp(PacketPtr pkt)
 {
-    // Just forward to the memobj.
     return owner->handleResponse(portId(), pkt);
 }
 
@@ -185,9 +176,8 @@ MemScheduler::MemSidePort::recvRangeChange()
 bool
 MemScheduler::handleRequest(PortID portId, PacketPtr pkt)
 {
-       ///////////////////////////////////////////////////////////////////////
-      /////////////////// TODO: adjust the schedule freq ////////////////////
-     /////////////////// sendRetry respective queue = true /////////////////
+      ///////////////////////////////////////////////////////////////////////
+     /////////////////// TODO: adjust the schedule freq ////////////////////
     ///////////////////////////////////////////////////////////////////////
     DPRINTF(MemScheduler, "handleRequest: Got request from cpuPort[%d]\n", portId);
     auto queue = find_if(requestQueues.begin(), requestQueues.end(), [portId](RequestQueue &obj){return obj.cpuPortId == portId;});
@@ -211,7 +201,7 @@ MemScheduler::processNextReqEvent(){
     uint64_t minCheck = -1;
     DPRINTF(MemScheduler, "processNextReqEvent: Finding the least recently visited non-empty queue\n");
     for (auto &it : requestQueues){
-        if ((it.timesChecked < minCheck) && (!it.emptyRead())){
+        if ((it.timesChecked < minCheck) && (!it.emptyRead() || it.serviceWrite())){
             minCheck = it.timesChecked;
         }
     }
@@ -219,7 +209,13 @@ MemScheduler::processNextReqEvent(){
         return (obj.timesChecked == minCheck);
         });
     DPRINTF(MemScheduler, "processNextReqEvent: Least recently visited queue found, cpuPortId = %d, (timesChecked = %d) == (minChecked = %d)\n", queue->cpuPortId, queue->timesChecked, minCheck);
-    PacketPtr pkt = queue->readQueue.front();
+    PacketPtr pkt;
+    if (!queue->serviceWrite()){
+        pkt = queue->readQueue.front();
+    }
+    else{
+        pkt = queue->writeQueue.front();
+    }
     AddrRange addr_range = pkt->getAddrRange();
     DPRINTF(MemScheduler, "processNextReqEvent: pkt->addr_range: %s\n", addr_range.to_string());
     PortID memPortId = memPortMap.contains(addr_range)->second;
@@ -239,13 +235,18 @@ MemScheduler::processNextReqEvent(){
             respRoutingTable[req] = cpuPortId;
         }
         DPRINTF(MemScheduler, "processNextReqEvent: Popping request from queues, requestQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
-        queue->readQueue.pop();
+        if (!queue->serviceWrite()){
+            queue->readQueue.pop();
+        }
+        else{
+            queue->writeQueue.pop();
+        }
         DPRINTF(MemScheduler, "processNextReqEvent: Popped request from queues, requestQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
     }
 
     if (!nextReqEvent.scheduled()){
         for (auto &queue : requestQueues){
-            if (!queue.emptyRead()){
+            if (!queue.emptyRead() || queue.serviceWrite()){
                 DPRINTF(MemScheduler, "processNextReqEvent: Scheduling nextReqEvent in processNextReqEvent\n");
                 schedule(nextReqEvent, curTick() + 500);
             }

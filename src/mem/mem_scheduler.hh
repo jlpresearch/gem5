@@ -62,27 +62,46 @@ class MemScheduler : public ClockedObject
       const uint32_t readQueueSize;
       const uint32_t writeQueueSize;
       const PortID cpuPortId;
+      const bool unifiedQueue;
       bool sendRetry;
       bool blocked(bool isRead){
-        return isRead ? readQueue.size() == readQueueSize : writeQueue.size() == writeQueueSize;
+        if (!unifiedQueue){
+          return isRead ? readQueue.size() == readQueueSize : writeQueue.size() == writeQueueSize;
+        }
+        else{
+          return  readQueue.size() == readQueueSize;
+        }
       }
       void push(PacketPtr pkt){
-        if (pkt->isRead())
+        if (!unifiedQueue){
+          if (pkt->isRead())
+            readQueue.push(pkt);
+          else if(pkt->isWrite())
+            writeQueue.push(pkt);
+        }
+        else
+        {
           readQueue.push(pkt);
-        else if(pkt->isWrite())
-          writeQueue.push(pkt);
+        }
       }
       bool emptyRead(){
         return readQueue.empty();
       }
-      bool emptyWrite(){
-        return writeQueue.empty();
+      // bool emptyWrite(){
+      //   return writeQueue.empty();
+      // }
+      bool serviceWrite(){
+        if (unifiedQueue){
+          return false;
+        }
+        return writeQueue.size() > int(0.6 * writeQueueSize);
       }
-      RequestQueue(uint32_t rQueueSize, uint32_t wQueueSize, PortID portId):
+      RequestQueue(uint32_t rQueueSize, uint32_t wQueueSize, bool unifiedQ, PortID portId):
       timesChecked(0),
       readQueueSize(rQueueSize),
       writeQueueSize(wQueueSize),
       cpuPortId(portId),
+      unifiedQueue(unifiedQ),
       sendRetry(false){}
     };
 
@@ -316,28 +335,14 @@ class MemScheduler : public ClockedObject
     const uint32_t readBufferSize;
     const uint32_t writeBufferSize;
     const uint32_t respBufferSize;
-    // const uint32_t numberPorts;
     const uint32_t nMemPorts;
     const uint32_t nCpuPorts;
-    // const uint32_t numberQueues;
 
-
-
-    std::unordered_map<RequestorID, std::queue<PacketPtr> >::iterator currentReadEntry;
-    std::unordered_map<RequestorID, std::queue<PacketPtr> >::iterator currentWriteEntry;
-    std::unordered_map<RequestorID, std::queue<PacketPtr> >::iterator currentRespEntry;
-    std::unordered_map<RequestorID, std::queue<PacketPtr> > readQueues;
-    std::unordered_map<RequestorID, std::queue<PacketPtr> > writeQueues;
-    std::unordered_map<RequestorID, std::queue<PacketPtr> > respQueues;
-    std::unordered_map<RequestorID, CPUSidePort*> routingTable;
-    /// True if this is currently blocked waiting for a response.
-    std::unordered_map<RequestorID, bool> readBlocked;
-    std::unordered_map<RequestorID, bool> writeBlocked;
-    std::unordered_map<RequestorID, bool> respBlocked;
     std::vector<RequestQueue> requestQueues;
     std::vector<ResponseQueue> responseQueues;
     std::unordered_map<RequestPtr, PortID> respRoutingTable;
     AddrRangeMap<PortID, 0> memPortMap;
+
   public:
 
     /** constructor

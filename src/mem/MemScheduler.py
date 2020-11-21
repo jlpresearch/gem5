@@ -36,11 +36,10 @@ class MemScheduler(ClockedObject):
     cpu_side = VectorResponsePort("CPU side port, receives requests")
     mem_side = VectorRequestPort("Ports on the memory "
                                         "controllers side")
-    # nbr_channels = Param.Int(8, "Number of banks this MemScheduler "
-    #                             "is responsible for")
     read_buffer_size = Param.Int(8, "Size of the internal read buffer")
     write_buffer_size = Param.Int(8, "Size of the internal "
                                     "write buffer")
     resp_buffer_size = Param.Int(8, "Size of the internal "
                                     "response buffer")
-    # nbr_cpus = Param.Int("Number of CPUs")
+    unified_queue = Param.Bool(True, "Use same queue for reads and "
+                                     "write")
