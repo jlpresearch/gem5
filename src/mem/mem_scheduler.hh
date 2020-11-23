@@ -63,7 +63,8 @@ class MemScheduler : public ClockedObject
       const uint32_t writeQueueSize;
       const PortID cpuPortId;
       const bool unifiedQueue;
-      bool sendRetry;
+      bool sendReadRetry;
+      bool sendWriteRetry;
       bool blocked(bool isRead){
         if (!unifiedQueue){
           return isRead ? readQueue.size() == readQueueSize : writeQueue.size() == writeQueueSize;
@@ -94,7 +95,9 @@ class MemScheduler : public ClockedObject
         if (unifiedQueue){
           return false;
         }
-        return writeQueue.size() > int(0.6 * writeQueueSize);
+        bool ret = !writeQueue.empty() && readQueue.empty();
+        ret |= writeQueue.size() > int(0.6 * writeQueueSize);
+        return ret;
       }
       RequestQueue(uint32_t rQueueSize, uint32_t wQueueSize, bool unifiedQ, PortID portId):
       timesChecked(0),
@@ -102,7 +105,8 @@ class MemScheduler : public ClockedObject
       writeQueueSize(wQueueSize),
       cpuPortId(portId),
       unifiedQueue(unifiedQ),
-      sendRetry(false){}
+      sendReadRetry(false),
+      sendWriteRetry(false){}
     };
 
     struct ResponseQueue{
