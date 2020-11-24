@@ -32,6 +32,7 @@
 #include <unordered_map>
 #include <queue>
 
+#include "base/statistics.hh"
 #include "mem/port.hh"
 #include "params/MemScheduler.hh"
 // #include "sim/sim_object.hh"
@@ -347,6 +348,21 @@ class MemScheduler : public ClockedObject
     std::vector<ResponseQueue> responseQueues;
     std::unordered_map<RequestPtr, PortID> respRoutingTable;
     AddrRangeMap<PortID, 0> memPortMap;
+
+    struct MemSchedulerStat : public Stats::Group
+    {
+      MemSchedulerStat(MemScheduler *parent);
+      void regStats() override;
+
+      Stats::Scalar readReqs;
+      Stats::Scalar writeReqs;
+      Stats::Scalar failedArbitrations;
+      Stats::Scalar totalArbitrations;
+      Stats::Scalar totalRQDelay;
+      Stats::Scalar totalWQDelay;
+      Stats::Formula avgRQDelay;
+      Stats::Formula avgWQDelay;
+    } stats;
 
   public:
 

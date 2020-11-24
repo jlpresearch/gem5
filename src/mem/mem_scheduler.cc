@@ -40,7 +40,8 @@ MemScheduler::MemScheduler(const MemSchedulerParams &params):
     respBufferSize(params.resp_buffer_size),
     nMemPorts(params.port_mem_side_connection_count),
     nCpuPorts(params.port_cpu_side_connection_count),
-    unifiedQueue(params.unified_queue)
+    unifiedQueue(params.unified_queue),
+    stats(this)
 {
 
     panic_if(readBufferSize == 0, "readBufferSize should be non-zero");
@@ -174,6 +175,26 @@ MemScheduler::MemSidePort::recvRangeChange()
     owner->recvRangeChange(_portId);
 }
 
+MemScheduler::MemSchedulerStat::MemSchedulerStat(MemScheduler *parent):
+    Stats::Group(parent),
+    ADD_STAT(readReqs, "Number of read requests received by the MemScheduler"),
+    ADD_STAT(writeReqs, "Number of write requests received by the MemScheduler"),
+    ADD_STAT(failedArbitrations, "Number of times an arbitration failed to send a request to MemCtrl"),
+    ADD_STAT(totalArbitrations, "Total number of arbitrations over the request queues in the MemScheduler"),
+    ADD_STAT(totalRQDelay, "Total queueing delay read requests have experienced in the MemScheduler"),
+    ADD_STAT(totalWQDelay, "Total queueing delay write requests have experienced in the MemScheduler"),
+    ADD_STAT(avgRQDelay, "Average queueing delay read requests have experienced in the MemScheduler"),
+    ADD_STAT(avgWQDelay, "Average queueing delay write requests have experienced in the MemScheduler")
+{}
+
+void
+MemScheduler::MemSchedulerStat::regStats(){
+    avgRQDelay.precision(2);
+    avgWQDelay.precision(2);
+    avgRQDelay = totalRQDelay / readReqs;
+    avgWQDelay = totalWQDelay / writeReqs;
+}
+
 bool
 MemScheduler::handleRequest(PortID portId, PacketPtr pkt)
 {
@@ -194,10 +215,12 @@ MemScheduler::handleRequest(PortID portId, PacketPtr pkt)
         return false;
     }
     if (pkt->isRead()){
+        stats.readReqs++;
         DPRINTF(MemScheduler, "handleRequest: Pushing read request to readQueues[%d], size = %d\n", portId, queue->readQueue.size());
         queue->push(pkt);
         DPRINTF(MemScheduler, "handleRequest: Pushed read request to readQueues[%d], size = %d\n", portId, queue->readQueue.size());
     } else{
+        stats.writeReqs++;
         DPRINTF(MemScheduler, "handleRequest: Pushing write request to writeQueues[%d], size = %d\n", portId, queue->writeQueue.size());
         queue->push(pkt);
         DPRINTF(MemScheduler, "handleRequest: Pushed write request to writeQueues[%d], size = %d\n", portId, queue->writeQueue.size());
@@ -222,6 +245,7 @@ MemScheduler::processNextReqEvent(){
     auto queue = find_if(requestQueues.begin(), requestQueues.end(), [minCheck](RequestQueue &obj){
         return (obj.timesChecked == minCheck);
         });
+    stats.totalArbitrations++;
     DPRINTF(MemScheduler, "processNextReqEvent: Least recently visited queue found, cpuPortId = %d, (timesChecked = %d) == (minChecked = %d), readQueue.size = %d, writeQueue.size = %d, serviceWrite = %d\n", queue->cpuPortId, queue->timesChecked, minCheck, queue->readQueue.size(), queue->writeQueue.size(), queue->serviceWrite());
     PacketPtr pkt;
     if (!queue->serviceWrite()){
@@ -260,6 +284,9 @@ MemScheduler::processNextReqEvent(){
             queue->writeQueue.pop();
             DPRINTF(MemScheduler, "processNextReqEvent: Popped write request to writeQueues[%d], size = %d\n", cpuPortId, queue->writeQueue.size());
         }
+    }
+    if (memPort->blocked()){
+        stats.failedArbitrations++;
     }
 
     if (!nextReqEvent.scheduled()){
