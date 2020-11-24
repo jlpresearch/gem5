@@ -61,6 +61,7 @@ class MemScheduler : public ClockedObject
       uint64_t timesChecked;
       const uint32_t readQueueSize;
       const uint32_t writeQueueSize;
+      const uint32_t writeThreshold;
       const PortID cpuPortId;
       const bool unifiedQueue;
       bool sendReadRetry;
@@ -96,13 +97,14 @@ class MemScheduler : public ClockedObject
           return false;
         }
         bool ret = !writeQueue.empty() && readQueue.empty();
-        ret |= writeQueue.size() > int(0.6 * writeQueueSize);
+        ret |= writeQueue.size() > int((writeThreshold * writeQueueSize) / 100);
         return ret;
       }
-      RequestQueue(uint32_t rQueueSize, uint32_t wQueueSize, bool unifiedQ, PortID portId):
+      RequestQueue(uint32_t rQueueSize, uint32_t wQueueSize, uint32_t writePercentage, bool unifiedQ, PortID portId):
       timesChecked(0),
       readQueueSize(rQueueSize),
       writeQueueSize(wQueueSize),
+      writeThreshold(writePercentage),
       cpuPortId(portId),
       unifiedQueue(unifiedQ),
       sendReadRetry(false),
@@ -334,13 +336,12 @@ class MemScheduler : public ClockedObject
     void processNextRespEvent();
     EventFunctionWrapper nextRespEvent;
 
-    MemSidePort* findMemoryPort(PacketPtr pkt);
-
     const uint32_t readBufferSize;
     const uint32_t writeBufferSize;
     const uint32_t respBufferSize;
     const uint32_t nMemPorts;
     const uint32_t nCpuPorts;
+    const bool unifiedQueue;
 
     std::vector<RequestQueue> requestQueues;
     std::vector<ResponseQueue> responseQueues;

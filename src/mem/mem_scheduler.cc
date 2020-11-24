@@ -39,7 +39,8 @@ MemScheduler::MemScheduler(const MemSchedulerParams &params):
     writeBufferSize(params.write_buffer_size),
     respBufferSize(params.resp_buffer_size),
     nMemPorts(params.port_mem_side_connection_count),
-    nCpuPorts(params.port_cpu_side_connection_count)
+    nCpuPorts(params.port_cpu_side_connection_count),
+    unifiedQueue(params.unified_queue)
 {
 
     panic_if(readBufferSize == 0, "readBufferSize should be non-zero");
@@ -47,7 +48,7 @@ MemScheduler::MemScheduler(const MemSchedulerParams &params):
                                     "should be non-zero");
     for (uint32_t i = 0; i < nCpuPorts; ++i){
         cpuPorts.emplace_back(name() + ".cpu_side" + std::to_string(i), i, this);
-        requestQueues.push_back(RequestQueue(readBufferSize, writeBufferSize, params.unified_queue, i));
+        requestQueues.push_back(RequestQueue(readBufferSize, writeBufferSize, params.service_write_threshold, unifiedQueue, i));
         responseQueues.push_back(ResponseQueue(respBufferSize, i));
     }
     for (uint32_t i = 0; i < nMemPorts; ++i){
@@ -182,13 +183,13 @@ MemScheduler::handleRequest(PortID portId, PacketPtr pkt)
     DPRINTF(MemScheduler, "handleRequest: Got request from cpuPort[%d]\n", portId);
     auto queue = find_if(requestQueues.begin(), requestQueues.end(), [portId](RequestQueue &obj){return obj.cpuPortId == portId;});
     if (queue->blocked(pkt->isRead() && !pkt->isWrite())){
-        if (pkt->isRead()){
-            DPRINTF(MemScheduler, "handleRequest: Blocking read request\n");
-            queue->sendReadRetry = true;
-        }
-        if (pkt->isWrite()){
+        if (pkt->isWrite() && !unifiedQueue){
             DPRINTF(MemScheduler, "handleRequest: Blocking write request\n");
             queue->sendWriteRetry = true;
+        }
+        if (pkt->isRead() || (unifiedQueue && pkt->isWrite())){
+            DPRINTF(MemScheduler, "handleRequest: Blocking read request\n");
+            queue->sendReadRetry = true;
         }
         return false;
     }
@@ -269,21 +270,32 @@ MemScheduler::processNextReqEvent(){
             }
         }
     }
-    
-    DPRINTF(MemScheduler, "processNextReqEvent: queue->readQueueBlocked: %d, queue->writeQueueBlocked: %d\n", queue->blocked(1), queue->blocked(0));
-    if (queue->sendReadRetry && !queue->blocked(pkt->isRead()) && pkt->isRead()){
-        PortID cpuPortId = queue->cpuPortId;
-        auto cpuPort = find_if(cpuPorts.begin(), cpuPorts.end(), [cpuPortId](CPUSidePort &obj){return obj.portId() == cpuPortId;});
-        DPRINTF(MemScheduler, "processNextReqEvent: Sending read retry to ports previously blocked\n");
-        cpuPort->trySendRetry();
-        queue->sendReadRetry = false;
+    if(!unifiedQueue){
+        DPRINTF(MemScheduler, "processNextReqEvent: queue->readQueueBlocked: %d, queue->writeQueueBlocked: %d\n", queue->blocked(1), queue->blocked(0));
+        if (queue->sendReadRetry && !queue->blocked(pkt->isRead()) && pkt->isRead()){
+            PortID cpuPortId = queue->cpuPortId;
+            auto cpuPort = find_if(cpuPorts.begin(), cpuPorts.end(), [cpuPortId](CPUSidePort &obj){return obj.portId() == cpuPortId;});
+            DPRINTF(MemScheduler, "processNextReqEvent: Sending read retry to ports previously blocked\n");
+            cpuPort->trySendRetry();
+            queue->sendReadRetry = false;
+        }
+        if (queue->sendWriteRetry && !queue->blocked(pkt->isRead()) && pkt->isWrite()){
+            PortID cpuPortId = queue->cpuPortId;
+            auto cpuPort = find_if(cpuPorts.begin(), cpuPorts.end(), [cpuPortId](CPUSidePort &obj){return obj.portId() == cpuPortId;});
+            DPRINTF(MemScheduler, "processNextReqEvent: Sending write retry to ports previously blocked\n");
+            cpuPort->trySendRetry();
+            queue->sendWriteRetry = false;
+        }
     }
-    if (queue->sendWriteRetry && !queue->blocked(pkt->isRead()) && pkt->isWrite()){
-        PortID cpuPortId = queue->cpuPortId;
-        auto cpuPort = find_if(cpuPorts.begin(), cpuPorts.end(), [cpuPortId](CPUSidePort &obj){return obj.portId() == cpuPortId;});
-        DPRINTF(MemScheduler, "processNextReqEvent: Sending write retry to ports previously blocked\n");
-        cpuPort->trySendRetry();
-        queue->sendWriteRetry = false;
+    else{
+        DPRINTF(MemScheduler, "processNextReqEvent: queue->readQueueBlocked: %d\n", queue->blocked(1));
+        if (queue->sendReadRetry && !queue->blocked(pkt->isRead() || pkt->isWrite())){
+            PortID cpuPortId = queue->cpuPortId;
+            auto cpuPort = find_if(cpuPorts.begin(), cpuPorts.end(), [cpuPortId](CPUSidePort &obj){return obj.portId() == cpuPortId;});
+            DPRINTF(MemScheduler, "processNextReqEvent: Sending read retry to ports previously blocked\n");
+            cpuPort->trySendRetry();
+            queue->sendReadRetry = false;
+        }
     }
 
     return;
