@@ -352,6 +352,7 @@ class MemScheduler : public ClockedObject
     AddrRangeMap<PortID, 0> memPortMap;
 
     std::unordered_map<PacketPtr, Tick> entryTimes;
+    std::unordered_map<PacketPtr, Tick> respEntryTimes;
     struct MemSchedulerStat : public Stats::Group
     {
       MemSchedulerStat(MemScheduler *parent);
@@ -363,8 +364,10 @@ class MemScheduler : public ClockedObject
       Stats::Scalar totalArbitrations;
       Stats::Scalar totalRQDelay;
       Stats::Scalar totalWQDelay;
+      Stats::Scalar totalRespDelay;
       Stats::Formula avgRQDelay;
       Stats::Formula avgWQDelay;
+      Stats::Formula avgRespDelay;
     } stats;
 
   public:

@@ -186,16 +186,20 @@ MemScheduler::MemSchedulerStat::MemSchedulerStat(MemScheduler *parent):
     ADD_STAT(totalArbitrations, "Total number of arbitrations over the request queues in the MemScheduler"),
     ADD_STAT(totalRQDelay, "Total queueing delay read requests have experienced in the MemScheduler"),
     ADD_STAT(totalWQDelay, "Total queueing delay write requests have experienced in the MemScheduler"),
+    ADD_STAT(totalRespDelay, "total queueing delay in the response queue experienced by the MemScheduler"),
     ADD_STAT(avgRQDelay, "Average queueing delay read requests have experienced in the MemScheduler"),
-    ADD_STAT(avgWQDelay, "Average queueing delay write requests have experienced in the MemScheduler")
+    ADD_STAT(avgWQDelay, "Average queueing delay write requests have experienced in the MemScheduler"),
+    ADD_STAT(avgRespDelay, "Average queueing delay in the response queue experienced by the MemScheduler")
 {}
 
 void
 MemScheduler::MemSchedulerStat::regStats(){
     avgRQDelay.precision(2);
     avgWQDelay.precision(2);
+    avgRespDelay.precision(2);
     avgRQDelay = totalRQDelay / readReqs;
     avgWQDelay = totalWQDelay / writeReqs;
+    avgRespDelay = totalRespDelay / readReqs;
 }
 
 bool
@@ -488,6 +492,8 @@ MemScheduler::processNextRespEvent(){
             PacketPtr pkt = queue.respQueue.front();
             cpuPort->sendPacket(pkt);
             DPRINTF(MemScheduler, "processNextRespEvent: Popping resp responseQueue[%d], size = %d\n", cpuPortId, queue.respQueue.size());
+            stats.totalRespDelay += curTick() - respEntryTimes[pkt];
+            respEntryTimes.erase(pkt);
             queue.respQueue.pop();
             DPRINTF(MemScheduler, "processNextRespEvent: Popped resp responseQueue[%d], size = %d\n", cpuPortId, queue.respQueue.size());
         }
@@ -533,6 +539,7 @@ MemScheduler::handleResponse(PortID memPortId, PacketPtr pkt)
     }
     DPRINTF(MemScheduler, "handleResponse: Queue not blocked!\n");
     DPRINTF(MemScheduler, "handleResponse: Pushing response to queues, responseQueues[%d], size = %d\n", cpuPortId, responseQueue->respQueue.size());
+    respEntryTimes[pkt] = curTick();
     responseQueue->respQueue.push(pkt);
     DPRINTF(MemScheduler, "handleResponse: Pushed response to queues, responseQueues[%d], size = %d\n", cpuPortId, responseQueue->respQueue.size());
     if(!nextRespEvent.scheduled()){
