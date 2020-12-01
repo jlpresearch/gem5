@@ -332,6 +332,7 @@ class MemScheduler : public ClockedObject
     std::vector<MemSidePort> memPorts;
 
     void processNextReqEvent();
+    void processNextReqEventOpt();
     EventFunctionWrapper nextReqEvent;
 
     void processNextRespEvent();
@@ -347,8 +348,10 @@ class MemScheduler : public ClockedObject
     std::vector<RequestQueue> requestQueues;
     std::vector<ResponseQueue> responseQueues;
     std::unordered_map<RequestPtr, PortID> respRoutingTable;
+    std::queue<PacketPtr> requestPool;
     AddrRangeMap<PortID, 0> memPortMap;
 
+    std::unordered_map<PacketPtr, Tick> entryTimes;
     struct MemSchedulerStat : public Stats::Group
     {
       MemSchedulerStat(MemScheduler *parent);

@@ -31,6 +31,9 @@
 #include "base/trace.hh"
 #include "debug/MemScheduler.hh"
 
+typedef std::pair<PacketPtr, PortID> ReqPair;
+typedef std::pair<uint64_t, PortID> QueuePair;
+
 MemScheduler::MemScheduler(const MemSchedulerParams &params):
     ClockedObject(params),
     nextReqEvent([this]{ processNextReqEvent(); }, name()),
@@ -216,11 +219,13 @@ MemScheduler::handleRequest(PortID portId, PacketPtr pkt)
     }
     if (pkt->isRead()){
         stats.readReqs++;
+        entryTimes[pkt] = curTick();
         DPRINTF(MemScheduler, "handleRequest: Pushing read request to readQueues[%d], size = %d\n", portId, queue->readQueue.size());
         queue->push(pkt);
         DPRINTF(MemScheduler, "handleRequest: Pushed read request to readQueues[%d], size = %d\n", portId, queue->readQueue.size());
     } else{
         stats.writeReqs++;
+        entryTimes[pkt] = curTick();
         DPRINTF(MemScheduler, "handleRequest: Pushing write request to writeQueues[%d], size = %d\n", portId, queue->writeQueue.size());
         queue->push(pkt);
         DPRINTF(MemScheduler, "handleRequest: Pushed write request to writeQueues[%d], size = %d\n", portId, queue->writeQueue.size());
@@ -231,6 +236,21 @@ MemScheduler::handleRequest(PortID portId, PacketPtr pkt)
     }
     return true;
 }
+
+// void
+// MemScheduler::processNextReqEventOpt(){
+//     // Filling request pool using a greedy algorithm
+//     if (requestPool.empty()){
+//         std::queue<ReqPair> request_pool;
+//         std::queue<PortID> port_pool;
+//         for (auto port : memPorts){
+//             if (!port.blocked()){
+//                 port_pool.push(port);
+//             }
+//         }
+//         for (auto queue : )
+//     }
+// }
 
 void
 MemScheduler::processNextReqEvent(){
@@ -247,6 +267,7 @@ MemScheduler::processNextReqEvent(){
         });
     stats.totalArbitrations++;
     DPRINTF(MemScheduler, "processNextReqEvent: Least recently visited queue found, cpuPortId = %d, (timesChecked = %d) == (minChecked = %d), readQueue.size = %d, writeQueue.size = %d, serviceWrite = %d\n", queue->cpuPortId, queue->timesChecked, minCheck, queue->readQueue.size(), queue->writeQueue.size(), queue->serviceWrite());
+
     PacketPtr pkt;
     if (!queue->serviceWrite()){
         DPRINTF(MemScheduler, "processNextReqEvent: Servicing read request now\n");
@@ -276,11 +297,15 @@ MemScheduler::processNextReqEvent(){
         }
         if (!queue->serviceWrite()){
             DPRINTF(MemScheduler, "processNextReqEvent: Popping read request to readQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
+            stats.totalRQDelay += curTick() - entryTimes[pkt];
+            entryTimes.erase(pkt);
             queue->readQueue.pop();
             DPRINTF(MemScheduler, "processNextReqEvent: Popped read request to readQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
         }
         else{
             DPRINTF(MemScheduler, "processNextReqEvent: Popping write request to writeQueues[%d], size = %d\n", cpuPortId, queue->writeQueue.size());
+            stats.totalWQDelay += curTick() - entryTimes[pkt];
+            entryTimes.erase(pkt);
             queue->writeQueue.pop();
             DPRINTF(MemScheduler, "processNextReqEvent: Popped write request to writeQueues[%d], size = %d\n", cpuPortId, queue->writeQueue.size());
         }
@@ -294,6 +319,129 @@ MemScheduler::processNextReqEvent(){
             if (!queue.emptyRead() || queue.serviceWrite()){
                 DPRINTF(MemScheduler, "processNextReqEvent: Scheduling nextReqEvent in processNextReqEvent\n");
                 schedule(nextReqEvent, curTick() + 500);
+                break;
+            }
+        }
+    }
+    if(!unifiedQueue){
+        DPRINTF(MemScheduler, "processNextReqEvent: queue->readQueueBlocked: %d, queue->writeQueueBlocked: %d\n", queue->blocked(1), queue->blocked(0));
+        if (queue->sendReadRetry && !queue->blocked(pkt->isRead()) && pkt->isRead()){
+            PortID cpuPortId = queue->cpuPortId;
+            auto cpuPort = find_if(cpuPorts.begin(), cpuPorts.end(), [cpuPortId](CPUSidePort &obj){return obj.portId() == cpuPortId;});
+            DPRINTF(MemScheduler, "processNextReqEvent: Sending read retry to ports previously blocked\n");
+            cpuPort->trySendRetry();
+            queue->sendReadRetry = false;
+        }
+        if (queue->sendWriteRetry && !queue->blocked(pkt->isRead()) && pkt->isWrite()){
+            PortID cpuPortId = queue->cpuPortId;
+            auto cpuPort = find_if(cpuPorts.begin(), cpuPorts.end(), [cpuPortId](CPUSidePort &obj){return obj.portId() == cpuPortId;});
+            DPRINTF(MemScheduler, "processNextReqEvent: Sending write retry to ports previously blocked\n");
+            cpuPort->trySendRetry();
+            queue->sendWriteRetry = false;
+        }
+    }
+    else{
+        DPRINTF(MemScheduler, "processNextReqEvent: queue->readQueueBlocked: %d\n", queue->blocked(1));
+        if (queue->sendReadRetry && !queue->blocked(pkt->isRead() || pkt->isWrite())){
+            PortID cpuPortId = queue->cpuPortId;
+            auto cpuPort = find_if(cpuPorts.begin(), cpuPorts.end(), [cpuPortId](CPUSidePort &obj){return obj.portId() == cpuPortId;});
+            DPRINTF(MemScheduler, "processNextReqEvent: Sending read retry to ports previously blocked\n");
+            cpuPort->trySendRetry();
+            queue->sendReadRetry = false;
+        }
+    }
+
+    return;
+}
+
+void
+MemScheduler::processNextReqEventOpt(){
+
+    QueuePair sortedQueues[nCpuPorts];
+    int index = 0;
+    for (auto queue : requestQueues){
+        sortedQueues[index++] = QueuePair(queue.timesChecked, queue.cpuPortId);
+    }
+    for (int i = 0; i < nCpuPorts - 1; i++){
+        for (int j = i + 1; j < nCpuPorts; j++){
+            if (sortedQueues[i].first > sortedQueues[j].first){
+                QueuePair temp = sortedQueues[i];
+                sortedQueues[i] = sortedQueues[j];
+                sortedQueues[j] = temp;
+            }
+        }
+    }
+
+    std::vector<RequestQueue>::iterator queue;
+    PacketPtr pkt;
+    
+    for (int i = 0; i < nCpuPorts; i++){
+        uint64_t minCheck = sortedQueues[i].first;
+        PortID portId = sortedQueues[i].second;
+        // DPRINTF(MemScheduler, "processNextReqEvent: Finding the least recently visited non-empty queue\n");
+        // for (auto &it : requestQueues){
+        //     if ((it.timesChecked < minCheck) && (!it.emptyRead() || it.serviceWrite())){
+        //         minCheck = it.timesChecked;
+        //     }
+        // }
+        queue = find_if(requestQueues.begin(), requestQueues.end(), [portId](RequestQueue &obj){
+            return (obj.cpuPortId == portId);
+            });
+        stats.totalArbitrations++;
+        DPRINTF(MemScheduler, "processNextReqEvent: Least recently visited queue found, cpuPortId = %d, (timesChecked = %d) == (minChecked = %d), readQueue.size = %d, writeQueue.size = %d, serviceWrite = %d\n", queue->cpuPortId, queue->timesChecked, minCheck, queue->readQueue.size(), queue->writeQueue.size(), queue->serviceWrite());
+
+        if (!queue->serviceWrite()){
+            DPRINTF(MemScheduler, "processNextReqEvent: Servicing read request now\n");
+            pkt = queue->readQueue.front();
+        }
+        else{
+            DPRINTF(MemScheduler, "processNextReqEvent: Servicing write request now\n");
+            pkt = queue->writeQueue.front();
+        }
+        AddrRange addr_range = pkt->getAddrRange();
+        DPRINTF(MemScheduler, "processNextReqEvent: pkt->addr_range: %s\n", addr_range.to_string());
+        PortID memPortId = memPortMap.contains(addr_range)->second;
+        DPRINTF(MemScheduler, "processNextReqEvent: Looked up outgoing routing table for MemSidePort PortID: %d\n", memPortId);
+        auto memPort = find_if(memPorts.begin(), memPorts.end(), [memPortId](MemSidePort &obj){return obj.portId() == memPortId;});
+        DPRINTF(MemScheduler, "processNextReqEvent: Port with proper addr range, memSidePort[%d]\n", memPort->portId());
+        queue->timesChecked++;
+
+        DPRINTF(MemScheduler, "processNextReqEvent: Sending the packet if port not blocked\n");
+        if (!memPort->blocked()){
+            DPRINTF(MemScheduler, "processNextReqEvent: Port not blocked! Sending the packet\n");
+            memPort->sendPacket(pkt);
+            PortID cpuPortId = queue->cpuPortId;
+            if (pkt->needsResponse()){
+                DPRINTF(MemScheduler, "processNextReqEvent: Updating incoming routing table for future, <%s, %d>\n", pkt->getAddrRange().to_string(), cpuPortId);
+                RequestPtr req = pkt->req;
+                respRoutingTable[req] = cpuPortId;
+            }
+            if (!queue->serviceWrite()){
+                DPRINTF(MemScheduler, "processNextReqEvent: Popping read request to readQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
+                stats.totalRQDelay += curTick() - entryTimes[pkt];
+                entryTimes.erase(pkt);
+                queue->readQueue.pop();
+                DPRINTF(MemScheduler, "processNextReqEvent: Popped read request to readQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
+            }
+            else{
+                DPRINTF(MemScheduler, "processNextReqEvent: Popping write request to writeQueues[%d], size = %d\n", cpuPortId, queue->writeQueue.size());
+                stats.totalWQDelay += curTick() - entryTimes[pkt];
+                entryTimes.erase(pkt);
+                queue->writeQueue.pop();
+                DPRINTF(MemScheduler, "processNextReqEvent: Popped write request to writeQueues[%d], size = %d\n", cpuPortId, queue->writeQueue.size());
+            }
+            break;
+        }
+        if (memPort->blocked()){
+            stats.failedArbitrations++;
+        }
+    }
+    if (!nextReqEvent.scheduled()){
+        for (auto &queue : requestQueues){
+            if (!queue.emptyRead() || queue.serviceWrite()){
+                DPRINTF(MemScheduler, "processNextReqEvent: Scheduling nextReqEvent in processNextReqEvent\n");
+                schedule(nextReqEvent, curTick() + 500);
+                break;
             }
         }
     }
