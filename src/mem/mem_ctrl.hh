@@ -583,6 +583,9 @@ class MemCtrl : public QoS::MemCtrl
         // per-requestor raed and write average memory access latency
         Stats::Formula requestorReadAvgLat;
         Stats::Formula requestorWriteAvgLat;
+
+        Stats::Scalar totalRespQLat;
+        Stats::Formula avgRespQLat;
     };
 
     CtrlStats stats;

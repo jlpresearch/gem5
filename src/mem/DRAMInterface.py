@@ -1428,17 +1428,17 @@ class LLM2(DRAMInterface):
     # system configuration
 
     # 512 grains each grain has 32bit (4x8)
-    device_bus_width = 2
+    device_bus_width = 1
     page_policy = 'close'
     #FGDRAM
     # Total number of pins in FGDRAM = 1024
     # There are 512 grains, therefore pins/grain = 1
     # Atom size =  32Byte , BL= 32/1 (Bytes)
-    burst_length = 256
+    burst_length = 512
 
     # size of channel in bytes, 4H stack of 16Gb dies is 8GB per stack;
     # with 512 channels, 128MB per channel
-    device_size = '128MB'
+    device_size = '2MB'
 
     #FGDRAM: row-size/activate
     device_rowbuffer_size = '256B'
@@ -1447,21 +1447,21 @@ class LLM2(DRAMInterface):
     devices_per_rank = 1 #?
 
     # HBM does not have a CS pin; set rank to 1
-    ranks_per_channel = 8 #?
+    ranks_per_channel = 1 #?
 
     # Each grain has 2 pseudobanks
-    banks_per_rank = 1
+    banks_per_rank = 2
 
     # One bank group per grain
-    bank_groups_per_rank = 0
+    bank_groups_per_rank = 1
 
     # use values from IDD measurement in JEDEC spec
     # use tRP value for tRCD and tCL similar to other classes
     tRP = '15ns'
     tRCD = '15ns'
-    tCL = '7ns'
-    tRAS = '29ns'
-    tCCD_L = '16ns'
+    tCL = '2ns'
+    tRAS = '20ns'
+    tCCD_L = '7ns'
     #tCCD_S = '2ns'
     tBURST_MIN = '2ns'#tCCD_S = '2ns'
     tBURST_MAX = '4ns'

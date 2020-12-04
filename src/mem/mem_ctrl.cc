@@ -657,6 +657,8 @@ MemCtrl::accessAndRespond(PacketPtr pkt, Tick static_latency)
         // number of data beats.
         Tick response_time = curTick() + static_latency + pkt->headerDelay +
                              pkt->payloadDelay;
+        stats.totalRespQLat += static_latency + pkt->headerDelay +
+                             pkt->payloadDelay;
         // Here we reset the timing of the packet before sending it out.
         pkt->headerDelay = pkt->payloadDelay = 0;
 
@@ -1249,7 +1251,11 @@ MemCtrl::CtrlStats::CtrlStats(MemCtrl &_ctrl)
     ADD_STAT(requestorReadAvgLat,
              "Per-requestor read average memory access latency"),
     ADD_STAT(requestorWriteAvgLat,
-             "Per-requestor write average memory access latency")
+             "Per-requestor write average memory access latency"),
+    ADD_STAT(totalRespQLat,
+             "Total response queue latency in memory controller"),
+    ADD_STAT(avgRespQLat,
+             "Average response queue latency in memory controller")
 
 {
 }
@@ -1264,6 +1270,7 @@ MemCtrl::CtrlStats::regStats()
 
     avgRdQLen.precision(2);
     avgWrQLen.precision(2);
+    avgRespQLat.precision(2);
 
     readPktSize.init(ceilLog2(ctrl.system()->cacheLineSize()) + 1);
     writePktSize.init(ceilLog2(ctrl.system()->cacheLineSize()) + 1);
@@ -1348,6 +1355,7 @@ MemCtrl::CtrlStats::regStats()
     requestorWriteRate = requestorWriteBytes / simSeconds;
     requestorReadAvgLat = requestorReadTotalLat / requestorReadAccesses;
     requestorWriteAvgLat = requestorWriteTotalLat / requestorWriteAccesses;
+    avgRespQLat = totalRespQLat / readBursts;
 }
 
 void
