@@ -114,8 +114,10 @@ MemCtrl::startup()
         // have to worry about negative values when computing the time for
         // the next request, this will add an insignificant bubble at the
         // start of simulation
+        DPRINTF(MemCtrl, "startup: Changing the value for nextBurstAt, currently nextBurstAt: %d\n", nextBurstAt);
         nextBurstAt = curTick() + (dram ? dram->commandOffset() :
                                           nvm->commandOffset());
+        DPRINTF(MemCtrl, "startup: Changed the value for nextBurstAt, now nextBurstAt: %d\n", nextBurstAt);
     }
 }
 
@@ -595,6 +597,7 @@ MemCtrl::chooseNextFRFCFS(MemPacketQueue& queue, Tick extra_col_delay)
     Tick col_allowed_at = MaxTick;
 
     // time we need to issue a column command to be seamless
+    
     const Tick min_col_at = std::max(nextBurstAt + extra_col_delay, curTick());
 
     // find optimal packet for each interface
@@ -693,7 +696,9 @@ Tick
 MemCtrl::getBurstWindow(Tick cmd_tick)
 {
     // get tick aligned to burst window
+
     Tick burst_offset = cmd_tick % commandWindow;
+    DPRINTF(MemCtrl, "getBurstWindow: cmd_tick: %d, commandWindow: %d, burst_offset: %d\n", cmd_tick, commandWindow, burst_offset);
     return (cmd_tick - burst_offset);
 }
 
@@ -701,10 +706,12 @@ Tick
 MemCtrl::verifySingleCmd(Tick cmd_tick, Tick max_cmds_per_burst)
 {
     // start with assumption that there is no contention on command bus
+    DPRINTF(DRAM, "verifySingleCmd: cmd_tick: %d, max_cmds_per_burst: %d\n", cmd_tick, max_cmds_per_burst);
     Tick cmd_at = cmd_tick;
 
     // get tick aligned to burst window
     Tick burst_tick = getBurstWindow(cmd_tick);
+    DPRINTF(DRAM, "verifySingleCmd: burst_tick: %d\n", burst_tick);
 
     // verify that we have command bandwidth to issue the command
     // if not, iterate over next window(s) until slot found
@@ -824,6 +831,7 @@ MemCtrl::doBurstAccess(MemPacket* mem_pkt)
     // when previous command was issued
     if (mem_pkt->isDram()) {
         std::vector<MemPacketQueue>& queue = selQueue(mem_pkt->isRead());
+        DPRINTF(MemCtrl, "doBurstAccess: Changing the value for nextBurstAt, currently nextBurstAt: %d\n", nextBurstAt);
         std::tie(cmd_at, nextBurstAt) =
                  dram->doBurstAccess(mem_pkt, nextBurstAt, queue);
 

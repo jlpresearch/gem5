@@ -289,11 +289,13 @@ DRAMInterface::activateBank(Rank& rank_ref, Bank& bank_ref,
     // verify that we have command bandwidth to issue the activate
     // if not, shift to next burst window
     Tick act_at;
-    if (twoCycleActivate)
+    if (twoCycleActivate){
         act_at = ctrl->verifyMultiCmd(act_tick, maxCommandsPerWindow, tAAD);
-    else
+    }
+    else{
+        DPRINTF(DRAM, "activateBank: calling verifySingleCmd\n");
         act_at = ctrl->verifySingleCmd(act_tick, maxCommandsPerWindow);
-
+    }
     DPRINTF(DRAM, "Activate at tick %d\n", act_at);
 
     // update the open row
@@ -323,9 +325,12 @@ DRAMInterface::activateBank(Rank& rank_ref, Bank& bank_ref,
     bank_ref.preAllowedAt = act_at + tRAS;
 
     // Respect the row-to-column command delay for both read and write cmds
+    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.rdAllowedAt: %d\n", act_at + tRCD, bank_ref.rdAllowedAt);
+    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.wrAllowedAt: %d\n", act_at + tRCD, bank_ref.wrAllowedAt);
     bank_ref.rdAllowedAt = std::max(act_at + tRCD, bank_ref.rdAllowedAt);
     bank_ref.wrAllowedAt = std::max(act_at + tRCD, bank_ref.wrAllowedAt);
-
+    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.rdAllowedAt: %d\n", act_at + tRCD, bank_ref.rdAllowedAt);
+    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.wrAllowedAt: %d\n", act_at + tRCD, bank_ref.wrAllowedAt);
     // start by enforcing tRRD
     for (int i = 0; i < banksPerRank; i++) {
         // next activate to any bank in this rank must not happen
@@ -410,6 +415,7 @@ DRAMInterface::prechargeBank(Rank& rank_ref, Bank& bank, Tick pre_tick,
         // Issuing an explicit PRE command
         // Verify that we have command bandwidth to issue the precharge
         // if not, shift to next burst window
+        DPRINTF(DRAM, "prechargeBank: calling verifySingleCmd\n");
         pre_at = ctrl->verifySingleCmd(pre_tick, maxCommandsPerWindow);
         // enforce tPPD
         for (int i = 0; i < banksPerRank; i++) {
@@ -504,15 +510,17 @@ DRAMInterface::doBurstAccess(MemPacket* mem_pkt, Tick next_burst_at,
 
     // we need to wait until the bus is available before we can issue
     // the command; need to ensure minimum bus delay requirement is met
+    DPRINTF(DRAM, "doBurstAccess: col_allowed_at: %d, next_burst_at: %d\n", col_allowed_at, next_burst_at);
     Tick cmd_at = std::max({col_allowed_at, next_burst_at, curTick()});
 
     // verify that we have command bandwidth to issue the burst
     // if not, shift to next burst window
     if (dataClockSync && ((cmd_at - rank_ref.lastBurstTick) > clkResyncDelay))
         cmd_at = ctrl->verifyMultiCmd(cmd_at, maxCommandsPerWindow, tCK);
-    else
+    else{
+        DPRINTF(DRAM, "doBurstAccess: calling verifySingleCmd\n");
         cmd_at = ctrl->verifySingleCmd(cmd_at, maxCommandsPerWindow);
-
+    }
     // if we are interleaving bursts, ensure that
     // 1) we don't double interleave on next burst issue
     // 2) we are at an interleave boundary; if not, shift to next boundary
@@ -529,7 +537,7 @@ DRAMInterface::doBurstAccess(MemPacket* mem_pkt, Tick next_burst_at,
             cmd_at = rank_ref.lastBurstTick + tBURST;
         }
     }
-    DPRINTF(DRAM, "Schedule RD/WR burst at tick %d\n", cmd_at);
+    DPRINTF(DRAM, "Schedule RD/WR burst at tick %d, tCL: %d, tBURST: %d\n", cmd_at, tCL, tBURST);
 
     // update the packet ready time
     mem_pkt->readyTime = cmd_at + tCL + tBURST;
@@ -2151,6 +2159,7 @@ NVMInterface::chooseRead(MemPacketQueue& queue)
                 cmd_at = ctrl->verifyMultiCmd(cmd_at,
                                               maxCommandsPerWindow, tCK);
             } else {
+                DPRINTF(NVM, "chooseRead: calling verifySingleCmd\n");
                 cmd_at = ctrl->verifySingleCmd(cmd_at,
                                                maxCommandsPerWindow);
             }
@@ -2288,6 +2297,7 @@ NVMInterface::doBurstAccess(MemPacket* pkt, Tick next_burst_at)
     // one command cycle
     // Write command may require multiple cycles to enable larger address space
     if (pkt->isRead() || !twoCycleRdWr) {
+        DPRINTF(NVM, "doBurstAccess: calling verifySingleCmd\n");
         cmd_at = ctrl->verifySingleCmd(cmd_at, maxCommandsPerWindow);
     } else {
         cmd_at = ctrl->verifyMultiCmd(cmd_at, maxCommandsPerWindow, tCK);
