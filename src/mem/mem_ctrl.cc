@@ -834,6 +834,8 @@ MemCtrl::doBurstAccess(MemPacket* mem_pkt)
         DPRINTF(MemCtrl, "doBurstAccess: Changing the value for nextBurstAt, currently nextBurstAt: %d\n", nextBurstAt);
         std::tie(cmd_at, nextBurstAt) =
                  dram->doBurstAccess(mem_pkt, nextBurstAt, queue);
+        DPRINTF(MemCtrl, "doBurstAccess: Changed the value for nextBurstAt, now nextBurstAt: %d\n", nextBurstAt);
+
 
         // Update timing for NVM ranks if NVM is configured on this channel
         if (nvm)
