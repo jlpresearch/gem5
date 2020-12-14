@@ -563,6 +563,7 @@ DRAMInterface::doBurstAccess(MemPacket* mem_pkt, Tick next_burst_at,
                     dly_to_wr_cmd = mem_pkt->isRead() ?
                                     std::max(tCCD_L, rdToWrDlySameBG) :
                                     tCCD_L_WR;
+                    DPRINTF(DRAM, "doBurstAt: dly_to_rd_cmd for bank%d: %d\n", i, dly_to_rd_cmd);
                 } else {
                     // tBURST is default requirement for diff BG timing
                     // Need to also take bus turnaround delays into account

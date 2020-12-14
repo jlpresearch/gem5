@@ -1433,7 +1433,7 @@ class LLM2(DRAMInterface):
     #FGDRAM
     # Total number of pins in FGDRAM = 1024
     # There are 512 grains, therefore pins/grain = 1
-    # Atom size =  32Byte , BL= 32/1 (Bytes)
+    # Atom size =  32Byte , BL= 64/1 (Bytes)
     burst_length = 512
 
     # size of channel in bytes, 4H stack of 16Gb dies is 8GB per stack;
@@ -1459,9 +1459,9 @@ class LLM2(DRAMInterface):
     # use tRP value for tRCD and tCL similar to other classes
     tRP = '15ns'
     tRCD = '15ns'
-    tCL = '2ns'
-    tRAS = '20ns'
-    tCCD_L = '7ns'
+    tCL = '3ns'
+    tRAS = '15ns'
+    tCCD_L = '15ns'
     #tCCD_S = '2ns'
     tBURST_MIN = '2ns'#tCCD_S = '2ns'
     tBURST_MAX = '4ns'
@@ -1478,7 +1478,7 @@ class LLM2(DRAMInterface):
     # extrapolate the following from LPDDR configs, using ns values
     # to minimize burst length, prefetch differences
     tWR = '18ns'
-    tRTP = '7.5ns'
+    tRTP = '0ns'
     tWTR = '10ns' #?
 
     # start with 2 cycles turnaround, similar to other memory classes
