@@ -260,17 +260,19 @@ void
 MemScheduler::processNextReqEvent(){
 
     uint64_t minCheck = -1;
+    RequestQueue *queue;
     DPRINTF(MemScheduler, "processNextReqEvent: Finding the least recently visited non-empty queue\n");
     for (auto &it : requestQueues){
         if ((it.timesChecked < minCheck) && (!it.emptyRead() || it.serviceWrite())){
             minCheck = it.timesChecked;
+            queue = &it;
         }
     }
-    auto queue = find_if(requestQueues.begin(), requestQueues.end(), [minCheck](RequestQueue &obj){
-        return (obj.timesChecked == minCheck);
-        });
+    // auto queue = find_if(requestQueues.begin(), requestQueues.end(), [minCheck](RequestQueue &obj){
+    //     return (obj.timesChecked == minCheck);
+    //     });
     stats.totalArbitrations++;
-    DPRINTF(MemScheduler, "processNextReqEvent: Least recently visited queue found, cpuPortId = %d, (timesChecked = %d) == (minChecked = %d), readQueue.size = %d, writeQueue.size = %d, serviceWrite = %d\n", queue->cpuPortId, queue->timesChecked, minCheck, queue->readQueue.size(), queue->writeQueue.size(), queue->serviceWrite());
+    DPRINTF(MemScheduler, "processNextReqEvent: Least recently visited queue found, cpuPortId = %d, (timesChecked = %d) == (minChecked = %d), readQueue.size = %d, writeQueue.size = %d, emptyRead = %d, serviceWrite = %d\n", queue->cpuPortId, queue->timesChecked, minCheck, queue->readQueue.size(), queue->writeQueue.size(), queue->emptyRead(), queue->serviceWrite());
 
     PacketPtr pkt;
     if (!queue->serviceWrite()){
