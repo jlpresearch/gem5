@@ -302,18 +302,18 @@ MemScheduler::processNextReqEvent(){
             respRoutingTable[req] = cpuPortId;
         }
         if (!queue->serviceWrite()){
-            DPRINTF(MemScheduler, "processNextReqEvent: Popping read request to readQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
+            DPRINTF(MemScheduler, "processNextReqEvent: Popping read request from readQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
             stats.totalRQDelay += curTick() - entryTimes[pkt];
             entryTimes.erase(pkt);
             queue->readQueue.pop();
-            DPRINTF(MemScheduler, "processNextReqEvent: Popped read request to readQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
+            DPRINTF(MemScheduler, "processNextReqEvent: Popped read request from readQueues[%d], size = %d\n", cpuPortId, queue->readQueue.size());
         }
         else{
-            DPRINTF(MemScheduler, "processNextReqEvent: Popping write request to writeQueues[%d], size = %d\n", cpuPortId, queue->writeQueue.size());
+            DPRINTF(MemScheduler, "processNextReqEvent: Popping write request from writeQueues[%d], size = %d\n", cpuPortId, queue->writeQueue.size());
             stats.totalWQDelay += curTick() - entryTimes[pkt];
             entryTimes.erase(pkt);
             queue->writeQueue.pop();
-            DPRINTF(MemScheduler, "processNextReqEvent: Popped write request to writeQueues[%d], size = %d\n", cpuPortId, queue->writeQueue.size());
+            DPRINTF(MemScheduler, "processNextReqEvent: Popped write request from writeQueues[%d], size = %d\n", cpuPortId, queue->writeQueue.size());
         }
     }
     if (memPort->blocked()){
