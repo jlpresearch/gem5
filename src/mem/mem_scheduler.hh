@@ -331,6 +331,8 @@ class MemScheduler : public ClockedObject
     /// Instantiation of the memory-side port
     std::vector<MemSidePort> memPorts;
 
+    RequestQueue* arbitrate(std::map<PortID, bool> visited);
+  
     void processNextReqEvent();
     void processNextReqEventOpt();
     EventFunctionWrapper nextReqEvent;
@@ -360,6 +362,7 @@ class MemScheduler : public ClockedObject
 
       Stats::Scalar readReqs;
       Stats::Scalar writeReqs;
+      Stats::Scalar bankConflicts;
       Stats::Scalar failedArbitrations;
       Stats::Scalar totalArbitrations;
       Stats::Scalar totalRQDelay;

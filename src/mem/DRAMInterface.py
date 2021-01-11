@@ -1438,7 +1438,7 @@ class LLM2(DRAMInterface):
 
     # size of channel in bytes, 4H stack of 16Gb dies is 8GB per stack;
     # with 512 channels, 128MB per channel
-    device_size = '2MB'
+    device_size = '16MB'
 
     #FGDRAM: row-size/activate
     device_rowbuffer_size = '256B'
