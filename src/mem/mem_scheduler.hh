@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Jason Lowe-Power
+ * Copyright (c) 2020 UC regents
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,31 +29,30 @@
 #ifndef __MEM_MEM_SCHEDULER_HH__
 #define __MEM_MEM_SCHEDULER_HH__
 
-#include <unordered_map>
 #include <queue>
+#include <unordered_map>
 
 #include "base/statistics.hh"
 #include "mem/port.hh"
 #include "params/MemScheduler.hh"
+
 // #include "sim/sim_object.hh"
-#include "sim/clocked_object.hh"
 #include "base/addr_range_map.hh"
+#include "sim/clocked_object.hh"
 
 /**
- * A very simple memory object. Current implementation doesn't even cache
- * anything it just forwards requests and responses.
- * This memobj is fully blocking (not non-blocking). Only a single request can
- * be outstanding at a time.
+ * A very simple memory object. This object can be connected to multiple memory
+ * controllers.
+ * One queue per port is  created and memory scheduler  serialize the requests
+ * to different memory controllers connected to the memory scheduler.
  */
-// typedef std::deque<MemPacket*> MemPacketQueue;
 class MemScheduler : public ClockedObject
 {
   private:
 
     /**
      * Port on the CPU-side that receives requests.
-     * Mostly just forwards requests to the owner.
-     * Part of a vector of ports. One for each CPU port (e.g., data, inst)
+     * Place the requests in the right queue and waits for arbitartion
      */
 
     struct RequestQueue{
@@ -69,7 +68,8 @@ class MemScheduler : public ClockedObject
       bool sendWriteRetry;
       bool blocked(bool isRead){
         if (!unifiedQueue){
-          return isRead ? readQueue.size() == readQueueSize : writeQueue.size() == writeQueueSize;
+          return isRead ? readQueue.size() == readQueueSize :
+                  writeQueue.size() == writeQueueSize;
         }
         else{
           return  readQueue.size() == readQueueSize;
@@ -79,7 +79,7 @@ class MemScheduler : public ClockedObject
         if (!unifiedQueue){
           if (pkt->isRead())
             readQueue.push(pkt);
-          else if(pkt->isWrite())
+          else if (pkt->isWrite())
             writeQueue.push(pkt);
         }
         else
@@ -90,18 +90,16 @@ class MemScheduler : public ClockedObject
       bool emptyRead(){
         return readQueue.empty();
       }
-      // bool emptyWrite(){
-      //   return writeQueue.empty();
-      // }
       bool serviceWrite(){
         if (unifiedQueue){
           return false;
         }
         bool ret = !writeQueue.empty() && readQueue.empty();
-        ret |= writeQueue.size() > int((writeThreshold * writeQueueSize) / 100);
+        ret |= writeQueue.size() > int((writeThreshold * writeQueueSize) /100);
         return ret;
       }
-      RequestQueue(uint32_t rQueueSize, uint32_t wQueueSize, uint32_t writePercentage, bool unifiedQ, PortID portId):
+      RequestQueue(uint32_t rQueueSize, uint32_t wQueueSize,
+                  uint32_t writePercentage, bool unifiedQ, PortID portId):
       timesChecked(0),
       readQueueSize(rQueueSize),
       writeQueueSize(wQueueSize),
@@ -136,7 +134,7 @@ class MemScheduler : public ClockedObject
         /// The object that owns this object (MemScheduler)
         MemScheduler *owner;
 
-        /// Keep track of whether the port has been occupied by a previous packet
+        // Keep track of whether the port has been occupied by a previous pkt
         bool _blocked;
         /// If we tried to send a packet and it was blocked, store it here
         PacketPtr _blockedPacket;
@@ -146,7 +144,8 @@ class MemScheduler : public ClockedObject
         /**
          * Constructor. Just calls the superclass constructor.
          */
-        CPUSidePort(const std::string& name, PortID portId, MemScheduler *owner) :
+        CPUSidePort(const std::string& name, PortID portId,
+                    MemScheduler *owner) :
             ResponsePort(name, owner), owner(owner), _blocked(false),
             _blockedPacket(nullptr), _portId(portId)
         {}
@@ -175,15 +174,15 @@ class MemScheduler : public ClockedObject
         void trySendRetry();
 
         bool blocked(){
-          return _blocked;
+            return _blocked;
         }
 
         PacketPtr blockedPkt(){
-          return _blockedPacket;
+            return _blockedPacket;
         }
 
         PortID portId(){
-          return _portId;
+            return _portId;
         }
 
       protected:
@@ -227,19 +226,21 @@ class MemScheduler : public ClockedObject
     class MemSidePort : public RequestPort
     {
       private:
-        /// The object that owns this object (MemScheduler)
-        MemScheduler *owner;
-        bool _blocked;
-        /// If we tried to send a packet and it was blocked, store it here
-        PacketPtr blockedPacket;
-        const PortID _portId;
+          /// The object that owns this object (MemScheduler)
+          MemScheduler *owner;
+          bool _blocked;
+          /// If we tried to send a packet and it was blocked, store it here
+          PacketPtr blockedPacket;
+          const PortID _portId;
       public:
-        /**
-         * Constructor. Just calls the superclass constructor.
-         */
-        MemSidePort(const std::string& name, PortID portId, MemScheduler *owner) :
-            RequestPort(name, owner), owner(owner), _blocked(false), blockedPacket(nullptr), _portId(portId)
-        {}
+          /**
+          * Constructor. Just calls the superclass constructor.
+          */
+          MemSidePort(const std::string& name, PortID portId,
+                      MemScheduler *owner) :
+              RequestPort(name, owner), owner(owner), _blocked(false),
+                          blockedPacket(nullptr), _portId(portId)
+          {}
 
         /**
          * Send a packet across this port. This is called by the owner and
@@ -332,7 +333,7 @@ class MemScheduler : public ClockedObject
     std::vector<MemSidePort> memPorts;
 
     RequestQueue* arbitrate(std::map<PortID, bool> visited);
-  
+
     void processNextReqEvent();
     void processNextReqEventOpt();
     EventFunctionWrapper nextReqEvent;

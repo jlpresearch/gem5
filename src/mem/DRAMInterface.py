@@ -1417,53 +1417,58 @@ class LPDDR5_6400_1x16_8B_BL32(LPDDR5_6400_1x16_BG_BL32):
 
 class LLM2(DRAMInterface):
 
-    beats_per_clock = 16
+    beats_per_clock = 64
 
     # 500 MHz for 2GB/s per Die
     tCK = '2ns'
-    # HBM gen1 supports up to 8 128-bit physical channels
-    # Configuration defines a single channel, with the capacity
-    # set to (full_ stack_capacity / 8) based on 2Gb dies
-    # To use all 512 grains, set 'channels' parameter to 512 in
-    # system configuration
 
-    # 512 grains each grain has 32bit (4x8)
+    # Each channel connecting to a single optical IO
     device_bus_width = 1
+
+    # Using close-page  policy to  have deterministic
+    # memory access latency
     page_policy = 'close'
-    #FGDRAM
-    # Total number of pins in FGDRAM = 1024
-    # There are 512 grains, therefore pins/grain = 1
+
+    # Total number of pins are 1024
+    # There are 1 pin/channel
     # Atom size =  32Byte , BL= 64/1 (Bytes)
     burst_length = 512
 
-    # size of channel in bytes, 4H stack of 16Gb dies is 8GB per stack;
-    # with 512 channels, 128MB per channel
+    # Size of channel in bytes, 4H stack of 16Gb dies is 8GB per stack.
+    # 16 channels (memscheduler) For 32 Bank per memscheduler 16MB device size
+    # For  64 banks per memscheduler 8MB device size
     device_size = '16MB'
 
-    #FGDRAM: row-size/activate
-    device_rowbuffer_size = '256B'
+    # Row buffer size for  HBM2.0 is 1KB
+    # To save activation energy we divide this by half
+    # To conpensate for the bank BW we can increase the bitlines
+    device_rowbuffer_size = '512B'
 
-    # 1x128 configuration
-    devices_per_rank = 1 #?
+    devices_per_rank = 1
 
-    # HBM does not have a CS pin; set rank to 1
-    ranks_per_channel = 1 #?
+    ranks_per_channel = 1
 
-    # Each grain has 2 pseudobanks
+    # Each bank has 2 mini-banks
     banks_per_rank = 2
 
-    # One bank group per grain
+    # One bank group per bank
     bank_groups_per_rank = 1
 
     # use values from IDD measurement in JEDEC spec
     # use tRP value for tRCD and tCL similar to other classes
     tRP = '15ns'
     tRCD = '15ns'
+    # Pre-GSA tCL + post-GSA tCL
     tCL = '3ns'
     tRAS = '15ns'
+    # We consider tCCD_L here as tRCD
+    # Requests going to the same bank and different mini-banks
+    # should be tRCD apart
+    # We are doing this because we are modeling mini0banks with
+    # multiple banks per ranks
     tCCD_L = '15ns'
-    #tCCD_S = '2ns'
-    tBURST_MIN = '2ns'#tCCD_S = '2ns'
+
+    tBURST_MIN = '2ns'
     tBURST_MAX = '4ns'
     # BL2 and BL4 supported, default to BL4
     # DDR @ 500 MHz means 4 * 2ns / 2 = 4ns
@@ -1475,11 +1480,11 @@ class LLM2(DRAMInterface):
     # value for 2Gb device from JEDEC spec
     tREFI = '3.9us'
 
-    # extrapolate the following from LPDDR configs, using ns values
-    # to minimize burst length, prefetch differences
+
     tWR = '18ns'
+    # wewill mask this we consecutive requests
     tRTP = '0ns'
-    tWTR = '10ns' #?
+    tWTR = '10ns'
 
     # start with 2 cycles turnaround, similar to other memory classes
     # could be more with variations across the stack
@@ -1500,98 +1505,5 @@ class LLM2(DRAMInterface):
 
     # start with tRFC + tXP -> 160ns + 8ns = 168ns
     tXS = '168ns'
-
-    addr_mapping = 'RoCoRaBaCh'
-
-class LLM(DRAMInterface):
-
-    # HBM gen1 supports up to 8 128-bit physical channels
-    # Configuration defines a single channel, with the capacity
-    # set to (full_ stack_capacity / 8) based on 2Gb dies
-    # To use all 8 channels, set 'channels' parameter to 8 in
-    # system configuration
-
-    # 128-bit interface legacy mode
-    device_bus_width = 8
-    page_policy = 'close'
-    # HBM supports BL4 and BL2 (legacy mode only)
-    burst_length = 64
-
-    # size of channel in bytes, 4H stack of 2Gb dies is 1GB per stack;
-    # with 8 channels, 128MB per channel
-    device_size = '16MB'
-
-    device_rowbuffer_size = '256B'
-
-    # 1x128 configuration
-    devices_per_rank = 1
-
-    # HBM does not have a CS pin; set rank to 1
-    ranks_per_channel = 1
-
-    # HBM has 8 or 16 banks depending on capacity
-    # 2Gb dies have 8 banks
-    banks_per_rank = 4
-
-    # depending on frequency, bank groups may be required
-    # will always have 4 bank groups when enabled
-    # current specifications do not define the minimum frequency for
-    # bank group architecture
-    # setting bank_groups_per_rank to 0 to disable until range is defined
-    bank_groups_per_rank = 0
-
-    # 500 MHz for 1Gbps DDR data rate
-    tCK = '2ns'
-
-    # use values from IDD measurement in JEDEC spec
-    # use tRP value for tRCD and tCL similar to other classes
-    tRP = '15ns'
-    tRCD = '15ns'
-    tCL = '7ns'
-    tRAS = '33ns'
-
-    # BL2 and BL4 supported, default to BL4
-    # DDR @ 500 MHz means 4 * 2ns / 2 = 4ns
-    tBURST = '4ns'
-    #tCCD_S = '2ns'
-    # value for 2Gb device from JEDEC spec
-    tRFC = '160ns'
-
-    # value for 2Gb device from JEDEC spec
-    tREFI = '3.9us'
-
-    # extrapolate the following from LPDDR configs, using ns values
-    # to minimize burst length, prefetch differences
-    tWR = '18ns'
-    tRTP = '7.5ns'
-    tWTR = '10ns'
-
-    # start with 2 cycles turnaround, similar to other memory classes
-    # could be more with variations across the stack
-    tRTW = '4ns'
-
-    # single rank device, set to 0
-    tCS = '0ns'
-
-    # from MemCon example, tRRD is 4ns with 2ns tCK
-    tRRD = '4ns'
-
-    # from MemCon example, tFAW is 30ns with 2ns tCK
-    tXAW = '30ns'
-    activation_limit = 32
-
-    # 4tCK
-    tXP = '8ns'
-
-    # start with tRFC + tXP -> 160ns + 8ns = 168ns
-    tXS = '168ns'
-
-# A single HBM x64 interface (one command and address bus), with
-# default timings based on HBM gen1 and data publically released
-# A 4H stack is defined, 8Gb per die for a total of 4GB of memory.
-# Note: This defines a pseudo-channel with a unique controller
-# instantiated per pseudo-channel
-# Stay at same IO rate (1Gbps) to maintain timing relationship with
-# HBM gen1 class (HBM_1000_4H_x128) where possible
 
     addr_mapping = 'RoCoRaBaCh'

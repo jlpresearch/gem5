@@ -833,6 +833,9 @@ class DRAMInterface : public MemInterface
         Stats::Formula writeRowHitRate;
         Stats::Histogram bytesPerActivate;
         // Number of bytes transferred to/from DRAM
+
+        Stats::Scalar bankConflicts;
+
         Stats::Scalar bytesRead;
         Stats::Scalar bytesWritten;
 

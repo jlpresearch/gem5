@@ -289,7 +289,7 @@ DRAMInterface::activateBank(Rank& rank_ref, Bank& bank_ref,
     // verify that we have command bandwidth to issue the activate
     // if not, shift to next burst window
     Tick act_at;
-    if (twoCycleActivate){
+    if (twoCycleActivate) {
         act_at = ctrl->verifyMultiCmd(act_tick, maxCommandsPerWindow, tAAD);
     }
     else{
@@ -325,12 +325,16 @@ DRAMInterface::activateBank(Rank& rank_ref, Bank& bank_ref,
     bank_ref.preAllowedAt = act_at + tRAS;
 
     // Respect the row-to-column command delay for both read and write cmds
-    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.rdAllowedAt: %d\n", act_at + tRCD, bank_ref.rdAllowedAt);
-    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.wrAllowedAt: %d\n", act_at + tRCD, bank_ref.wrAllowedAt);
+    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.rdAllowedAt: "
+            "%d\n", act_at + tRCD, bank_ref.rdAllowedAt);
+    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.wrAllowedAt: "
+            " %d\n", act_at + tRCD, bank_ref.wrAllowedAt);
     bank_ref.rdAllowedAt = std::max(act_at + tRCD, bank_ref.rdAllowedAt);
     bank_ref.wrAllowedAt = std::max(act_at + tRCD, bank_ref.wrAllowedAt);
-    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.rdAllowedAt: %d\n", act_at + tRCD, bank_ref.rdAllowedAt);
-    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.wrAllowedAt: %d\n", act_at + tRCD, bank_ref.wrAllowedAt);
+    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.rdAllowedAt: "
+            "%d\n", act_at + tRCD, bank_ref.rdAllowedAt);
+    DPRINTF(DRAM, "activateBank: act_at + tRCD: %d, bank_ref.wrAllowedAt: "
+            " %d\n", act_at + tRCD, bank_ref.wrAllowedAt);
     // start by enforcing tRRD
     for (int i = 0; i < banksPerRank; i++) {
         // next activate to any bank in this rank must not happen
@@ -510,14 +514,15 @@ DRAMInterface::doBurstAccess(MemPacket* mem_pkt, Tick next_burst_at,
 
     // we need to wait until the bus is available before we can issue
     // the command; need to ensure minimum bus delay requirement is met
-    DPRINTF(DRAM, "doBurstAccess: col_allowed_at: %d, next_burst_at: %d\n", col_allowed_at, next_burst_at);
+    DPRINTF(DRAM, "doBurstAccess: col_allowed_at: %d, next_burst_at: %d\n",
+            col_allowed_at, next_burst_at);
     Tick cmd_at = std::max({col_allowed_at, next_burst_at, curTick()});
 
     // verify that we have command bandwidth to issue the burst
     // if not, shift to next burst window
     if (dataClockSync && ((cmd_at - rank_ref.lastBurstTick) > clkResyncDelay))
         cmd_at = ctrl->verifyMultiCmd(cmd_at, maxCommandsPerWindow, tCK);
-    else{
+    else {
         DPRINTF(DRAM, "doBurstAccess: calling verifySingleCmd\n");
         cmd_at = ctrl->verifySingleCmd(cmd_at, maxCommandsPerWindow);
     }
@@ -537,7 +542,8 @@ DRAMInterface::doBurstAccess(MemPacket* mem_pkt, Tick next_burst_at,
             cmd_at = rank_ref.lastBurstTick + tBURST;
         }
     }
-    DPRINTF(DRAM, "Schedule RD/WR burst at tick %d, tCL: %d, tBURST: %d\n", cmd_at, tCL, tBURST);
+    DPRINTF(DRAM, "Schedule RD/WR burst at tick %d, tCL: %d, tBURST: %d\n",
+                    cmd_at, tCL, tBURST);
 
     // update the packet ready time
     mem_pkt->readyTime = cmd_at + tCL + tBURST;
@@ -563,7 +569,8 @@ DRAMInterface::doBurstAccess(MemPacket* mem_pkt, Tick next_burst_at,
                     dly_to_wr_cmd = mem_pkt->isRead() ?
                                     std::max(tCCD_L, rdToWrDlySameBG) :
                                     tCCD_L_WR;
-                    DPRINTF(DRAM, "doBurstAt: dly_to_rd_cmd for bank%d: %d\n", i, dly_to_rd_cmd);
+                    DPRINTF(DRAM, "doBurstAt: dly_to_rd_cmd for bank%d: %d\n",
+                            i, dly_to_rd_cmd);
                 } else {
                     // tBURST is default requirement for diff BG timing
                     // Need to also take bus turnaround delays into account
@@ -692,6 +699,10 @@ DRAMInterface::doBurstAccess(MemPacket* mem_pkt, Tick next_burst_at,
         stats.totMemAccLat += mem_pkt->readyTime - mem_pkt->entryTime;
         stats.totQLat += cmd_at - mem_pkt->entryTime;
         stats.totBusLat += tBURST;
+
+        if (mem_pkt->readyTime - mem_pkt->entryTime > 24){
+            stats.bankConflicts++;
+        }
     } else {
         // Schedule write done event to decrement event count
         // after the readyTime has been reached
@@ -1880,6 +1891,9 @@ DRAMInterface::DRAMStats::DRAMStats(DRAMInterface &_dram)
     ADD_STAT(writeRowHitRate, "Row buffer hit rate for writes"),
 
     ADD_STAT(bytesPerActivate, "Bytes accessed per row activation"),
+
+    ADD_STAT(bankConflicts, "Number of bankconflicts in memory controller"),
+
     ADD_STAT(bytesRead, "Total number of bytes read from DRAM"),
     ADD_STAT(bytesWritten, "Total number of bytes written to DRAM"),
     ADD_STAT(avgRdBW, "Average DRAM read bandwidth in MiBytes/s"),

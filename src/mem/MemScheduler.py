@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# Copyright (c) 2017 Jason Lowe-Power
+# Copyright (c) 2020 UC regents
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -42,5 +41,5 @@ class MemScheduler(ClockedObject):
     resp_buffer_size = Param.Int(8, "Size of the internal "
                                     "response buffer")
     service_write_threshold = Param.Percent(60, "Threshold to force writes")
-    unified_queue = Param.Bool(False, "Use same queue for reads and "
+    unified_queue = Param.Bool(True, "Use same queue for reads and "
                                      "write")
