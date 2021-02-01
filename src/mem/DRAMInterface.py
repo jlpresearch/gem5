@@ -1484,11 +1484,12 @@ class LLM2(DRAMInterface):
     tWR = '18ns'
     # wewill mask this we consecutive requests
     tRTP = '0ns'
-    tWTR = '10ns'
+    tWTR = '0ns'
+    tWTR_L = '0ns'
 
     # start with 2 cycles turnaround, similar to other memory classes
     # could be more with variations across the stack
-    tRTW = '4ns'
+    tRTW = '0ns'
     # single rank device, set to 0
     tCS = '0ns'
 

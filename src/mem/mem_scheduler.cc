@@ -521,7 +521,6 @@ MemScheduler::processNextReqEventOpt(){
 
     DPRINTF(MemScheduler, "processNextReqEvent: "
         "Port not blocked! Sending the packet\n");
-    memPort->sendPacket(pkt);
     PortID cpuPortId = pick->cpuPortId;
     if (pkt->needsResponse()){
         DPRINTF(MemScheduler, "processNextReqEvent: "
@@ -530,6 +529,9 @@ MemScheduler::processNextReqEventOpt(){
         RequestPtr req = pkt->req;
         respRoutingTable[req] = cpuPortId;
     }
+
+    memPort->sendPacket(pkt);
+
     if (!pick->serviceWrite()){
         DPRINTF(MemScheduler, "processNextReqEvent: "
             "Popping read request from readQueues[%d], size = %d\n",
