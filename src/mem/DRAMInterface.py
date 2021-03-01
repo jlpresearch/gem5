@@ -51,10 +51,11 @@ class DRAMInterface(MemInterface):
 
     # scheduler page policy
     page_policy = Param.PageManage('open_adaptive', "Page management policy")
+    salp_enable = Param.Bool(False, "Enabling subarray-level parallelism")
 
     # enforce a limit on the number of accesses per row
     max_accesses_per_row = Param.Unsigned(16, "Max accesses per row before "
-                                          "closing");
+                                          "closing")
 
     # default to 0 bank groups per rank, indicating bank group architecture
     # is not used
@@ -506,7 +507,7 @@ class DDR4_2400_16x4(DRAMInterface):
     # CAS-to-CAS delay for bursts to the same bank group
     # tBURST is equivalent to tCCD_S; no explicit parameter required
     # for CAS-to-CAS delay for bursts to different bank groups
-    tCCD_L = '5ns';
+    tCCD_L = '5ns'
 
     # DDR4-2400 17-17-17
     tRCD = '14.16ns'
@@ -518,7 +519,7 @@ class DDR4_2400_16x4(DRAMInterface):
     tRRD = '3.332ns'
 
     # RRD_L (same bank group) for 512B page is MAX(4 CK, 4.9ns)
-    tRRD_L = '4.9ns';
+    tRRD_L = '4.9ns'
 
     # tFAW for 512B page is MAX(16 CK, 13ns)
     tXAW = '13.328ns'
@@ -582,7 +583,7 @@ class DDR4_2400_8x8(DDR4_2400_16x4):
     devices_per_rank = 8
 
     # RRD_L (same bank group) for 1K page is MAX(4 CK, 4.9ns)
-    tRRD_L = '4.9ns';
+    tRRD_L = '4.9ns'
 
     tXAW = '21ns'
 
@@ -624,7 +625,7 @@ class DDR4_2400_4x16(DDR4_2400_16x4):
     tRRD = '5.3ns'
 
     # RRD_L (same bank group) for 2K page is MAX(4 CK, 6.4ns)
-    tRRD_L = '6.4ns';
+    tRRD_L = '6.4ns'
 
     tXAW = '30ns'
 
@@ -949,7 +950,7 @@ class GDDR5_4000_2x32(DRAMInterface):
     # CAS-to-CAS delay for bursts to the same bank group
     # tBURST is equivalent to tCCD_S; no explicit parameter required
     # for CAS-to-CAS delay for bursts to different bank groups
-    tCCD_L = '3ns';
+    tCCD_L = '3ns'
 
     tRCD = '12ns'
 
@@ -1021,7 +1022,7 @@ class HBM_1000_4H_1x128(DRAMInterface):
     # HBM has 8 or 16 banks depending on capacity
     # 2Gb dies have 8 banks
     banks_per_rank = 8
-
+    subarray_per_bank = 512
     # depending on frequency, bank groups may be required
     # will always have 4 bank groups when enabled
     # current specifications do not define the minimum frequency for
@@ -1066,14 +1067,15 @@ class HBM_1000_4H_1x128(DRAMInterface):
     tRRD = '4ns'
 
     # from MemCon example, tFAW is 30ns with 2ns tCK
-    tXAW = '30ns'
-    activation_limit = 4
+    tXAW = '12ns'
+    activation_limit = 8
 
     # 4tCK
     tXP = '8ns'
 
     # start with tRFC + tXP -> 160ns + 8ns = 168ns
     tXS = '168ns'
+    salp_enable = True
 
 # A single HBM x64 interface (one command and address bus), with
 # default timings based on HBM gen1 and data publically released
@@ -1414,3 +1416,4 @@ class LPDDR5_6400_1x16_8B_BL32(LPDDR5_6400_1x16_BG_BL32):
     tCCD_L = "0ns"
     tRRD_L = "0ns"
     tWTR_L = "0ns"
+

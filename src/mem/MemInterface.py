@@ -77,6 +77,8 @@ class MemInterface(AbstractMemory):
     devices_per_rank = Param.Unsigned("Number of devices/chips per rank")
     ranks_per_channel = Param.Unsigned("Number of ranks per channel")
     banks_per_rank = Param.Unsigned("Number of banks per rank")
+    # default to 0 which means subarray-level parallelism is not used
+    subarray_per_bank = Param.Unsigned(0, "Number of bank groups per rank")
 
     # timing behaviour and constraints - all in nanoseconds
 

@@ -135,12 +135,13 @@ class MemInterface : public AbstractMemory
     const uint32_t burstsPerStripe;
     const uint32_t ranksPerChannel;
     const uint32_t banksPerRank;
+    const uint32_t subarrayPerBank;
     uint32_t rowsPerBank;
 
     /**
      * General timing requirements
      */
-    M5_CLASS_VAR_USED const Tick tCK;
+    const Tick M5_CLASS_VAR_USED tCK;
     const Tick tCS;
     const Tick tBURST;
     const Tick tRTW;
@@ -289,7 +290,7 @@ class MemInterface : public AbstractMemory
     virtual void addRankToRankDelay(Tick cmd_at) = 0;
 
     typedef MemInterfaceParams Params;
-    MemInterface(const Params &_p);
+    MemInterface(const Params* _p);
 };
 
 /**
@@ -583,7 +584,7 @@ class DRAMInterface : public MemInterface
          */
         Tick lastBurstTick;
 
-        Rank(const DRAMInterfaceParams &_p, int _rank,
+        Rank(const DRAMInterfaceParams* _p, int _rank,
              DRAMInterface& _dram);
 
         const std::string name() const { return csprintf("%d", rank); }
@@ -752,6 +753,7 @@ class DRAMInterface : public MemInterface
 
 
     Enums::PageManage pageMgmt;
+    bool salp_en;
     /**
      * Max column accesses (read and write) per row, before forefully
      * closing it.
@@ -796,8 +798,8 @@ class DRAMInterface : public MemInterface
      * @param trace Is this an auto precharge then do not add to trace
      */
     void prechargeBank(Rank& rank_ref, Bank& bank_ref,
-                       Tick pre_tick, bool auto_or_preall = false,
-                       bool trace = true);
+                       Tick pre_tick, bool hit_subaaray = true,
+                       bool auto_or_preall = false, bool trace = true);
 
     struct DRAMStats : public Stats::Group
     {
@@ -1009,7 +1011,7 @@ class DRAMInterface : public MemInterface
      */
     void checkRefreshState(uint8_t rank);
 
-    DRAMInterface(const DRAMInterfaceParams &_p);
+    DRAMInterface(const DRAMInterfaceParams* _p);
 };
 
 /**
@@ -1039,7 +1041,7 @@ class NVMInterface : public MemInterface
          */
         std::vector<Bank> banks;
 
-        Rank(const NVMInterfaceParams &_p, int _rank,
+        Rank(const NVMInterfaceParams* _p, int _rank,
              NVMInterface& _nvm);
     };
 
@@ -1256,7 +1258,7 @@ class NVMInterface : public MemInterface
     std::pair<Tick, Tick>
     doBurstAccess(MemPacket* pkt, Tick next_burst_at);
 
-    NVMInterface(const NVMInterfaceParams &_p);
+    NVMInterface(const NVMInterfaceParams* _p);
 };
 
 #endif //__MEM_INTERFACE_HH__
