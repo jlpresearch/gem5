@@ -18,10 +18,10 @@ class GUPSGen : public ClockedObject {
 
         const RequestorID requestorId;
 
-        class MemSidePort : public RequestPort
+        class GenPort : public RequestPort
         {
             private:
-                /// The object that owns this object (MemScheduler)
+                /// The object that owns this object (GUPSGen)
                 GUPSGen *owner;
                 bool _blocked;
                 /// If we tried to send a packet and it was blocked,
@@ -32,9 +32,9 @@ class GUPSGen : public ClockedObject {
                 /**
                  * Constructor. Just calls the superclass constructor.
                  */
-                MemSidePort(const std::string& name, GUPSGen *owner) :
+                GenPort(const std::string& name, GUPSGen *owner) :
                     RequestPort(name, owner), owner(owner), _blocked(false),
-                                                    blockedPacket(nullptr)
+                    blockedPacket(nullptr)
                 {}
 
                 /**
@@ -49,7 +49,7 @@ class GUPSGen : public ClockedObject {
                 void sendFunctionalPacket(PacketPtr pkt);
 
                 bool blocked(){
-                return _blocked;
+                    return _blocked;
                 }
 
 
@@ -85,36 +85,36 @@ class GUPSGen : public ClockedObject {
         void handleResponse(PacketPtr pkt);
 
 
-        PacketPtr getReadPacket(Addr);
-        PacketPtr getWritePacket(Addr, uint8_t*);
+        PacketPtr getReadPacket(Addr, unsigned int);
+        PacketPtr getWritePacket(Addr, unsigned int, uint8_t*);
 
-        void generateNextBatch();
+        // void generateNextBatch();
 
 
-        std::pair<Addr, uint64_t> indexToAddr (uint64_t index);
-        uint64_t addrToIndex (Addr addr, uint64_t offset);
+        Addr indexToAddr (uint64_t index);
+        uint64_t addrToIndex (Addr addr);
 
 
         uint64_t randomNumberGenerator(int64_t n);
 
         void wakeUp();
 
+        void generateNextReq();
+        EventFunctionWrapper nextGenEvent;
+
         void sendNextBatch();
         EventFunctionWrapper nextSendEvent;
-
-
 
         std::unordered_map<PacketPtr, Tick> exitTimes;
         std::queue<PacketPtr> requestPool;
         std::queue<PacketPtr> responsePool;
 
-        MemSidePort port;
+        GenPort port;
 
         Addr startAddr; // Should be a multiple of 64
         Addr memSize;
 
-        std::unordered_map<Addr, std::vector<std::pair<uint64_t, uint64_t>>>
-                                                            translationTable;
+        std::unordered_map<Addr, uint64_t> updateTable;
 
         uint64_t randomSeeds[128];
         uint64_t numUpdates;
@@ -124,6 +124,9 @@ class GUPSGen : public ClockedObject {
 
         uint64_t tableSize;
 
+        bool doneReading;
+
+        uint64_t onTheFlyRequests;
     public:
 
         GUPSGen(const GUPSGenParams &params);
