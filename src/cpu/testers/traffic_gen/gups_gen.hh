@@ -1,3 +1,31 @@
+/*
+ * Copyright (c) 2021 The Regents of the University of California.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met: redistributions of source code must retain the above copyright
+ * notice, this list of conditions and the following disclaimer;
+ * redistributions in binary form must reproduce the above copyright
+ * notice, this list of conditions and the following disclaimer in the
+ * documentation and/or other materials provided with the distribution;
+ * neither the name of the copyright holders nor the names of its
+ * contributors may be used to endorse or promote products derived from
+ * this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #ifndef __MEM_GUPS_GEN_HH__
 #define __MEM_GUPS_GEN_HH__
 
@@ -14,9 +42,6 @@
 class GUPSGen : public ClockedObject {
 
     private:
-        System *const system;
-
-        const RequestorID requestorId;
 
         class GenPort : public RequestPort
         {
@@ -37,6 +62,9 @@ class GUPSGen : public ClockedObject {
                     blockedPacket(nullptr)
                 {}
 
+                bool blocked(){
+                    return _blocked;
+                }
                 /**
                  * Send a packet across this port. T
                  * his is called by the owner and all of the flow
@@ -47,11 +75,6 @@ class GUPSGen : public ClockedObject {
 
                 void sendTimingPacket(PacketPtr pkt);
                 void sendFunctionalPacket(PacketPtr pkt);
-
-                bool blocked(){
-                    return _blocked;
-                }
-
 
             protected:
                 /**
@@ -78,55 +101,76 @@ class GUPSGen : public ClockedObject {
         };
 
 
-        virtual void startup() override;
-
         virtual void init() override;
 
-        void handleResponse(PacketPtr pkt);
+        virtual void startup() override;
 
+        uint64_t randomNumberGenerator(int64_t n);
+        Addr indexToAddr (uint64_t index);
 
         PacketPtr getReadPacket(Addr, unsigned int);
         PacketPtr getWritePacket(Addr, unsigned int, uint8_t*);
 
-        // void generateNextBatch();
-
-
-        Addr indexToAddr (uint64_t index);
-        uint64_t addrToIndex (Addr addr);
-
-
-        uint64_t randomNumberGenerator(int64_t n);
-
+        void handleResponse(PacketPtr pkt);
         void wakeUp();
 
-        void generateNextReq();
-        EventFunctionWrapper nextGenEvent;
-
-        void sendNextBatch();
+        void sendNextReq();
         EventFunctionWrapper nextSendEvent;
 
-        std::unordered_map<PacketPtr, Tick> exitTimes;
+        std::unordered_map<RequestPtr, uint64_t> updateTable;
+        std::unordered_map<RequestPtr, Tick> exitTimes;
         std::queue<PacketPtr> requestPool;
         std::queue<PacketPtr> responsePool;
 
-        GenPort port;
-
-        Addr startAddr; // Should be a multiple of 64
-        Addr memSize;
-
-        std::unordered_map<Addr, uint64_t> updateTable;
-
         uint64_t randomSeeds[128];
         uint64_t numUpdates;
+        uint64_t tableSize;
+
+        System *const system;
+
+        const RequestorID requestorId;
+
+        GenPort port;
 
         Addr blockSize;
 
+        Addr startAddr;
 
-        uint64_t tableSize;
+        Addr memSize;
+
+        int reqQueueSize;
+
+        bool doGenerate;
 
         bool doneReading;
 
         uint64_t onTheFlyRequests;
+
+        const int elementSize;
+
+        struct GUPSGenStat : public Stats::Group
+        {
+            GUPSGenStat(GUPSGen* parent);
+            void regStats() override;
+
+            Stats::Scalar totalTicks;
+
+            Stats::Scalar totalUpdates;
+            Stats::Formula GUPS;
+
+            Stats::Scalar totalReads;
+            Stats::Scalar totalBytesRead;
+            Stats::Formula avgReadBW;
+            Stats::Scalar totalReadLat;
+            Stats::Formula avgReadLat;
+
+            Stats::Scalar totalWrites;
+            Stats::Scalar totalBytesWritten;
+            Stats::Formula avgWriteBW;
+            Stats::Scalar totalWriteLat;
+            Stats::Formula avgWriteLat;
+        } stats;
+
     public:
 
         GUPSGen(const GUPSGenParams &params);
