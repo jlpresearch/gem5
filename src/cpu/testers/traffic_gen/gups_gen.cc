@@ -249,6 +249,7 @@ GUPSGen::sendNextReq() {
 
             uint64_t *updated_value = pkt->getPtr<uint64_t>();
             *updated_value ^= updateTable[pkt->req];
+            updateTable.erase(pkt->req);
 
             uint8_t write_data[elementSize];
             std::memcpy(write_data, updated_value, elementSize);
